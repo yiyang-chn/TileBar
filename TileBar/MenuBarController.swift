@@ -15,8 +15,9 @@ final class MenuBarController: NSObject {
     /// User picked "把焦点窗口送到显示器 N" from the menu (1-indexed).
     var onMoveToDisplay: ((Int) -> Void)?
 
-    /// User picked "上一个 / 下一个显示器" — delta is -1 / +1 with cyclic wrap.
-    var onMoveByDelta: ((Int) -> Void)?
+    /// User picked "送到左/右/上/下方显示器" — physical direction in the
+    /// current display arrangement.
+    var onMoveInDirection: ((SpatialDirection) -> Void)?
 
     /// User picked "重新加载配置".
     var onReloadConfig: (() -> Void)?
@@ -41,7 +42,11 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func handleScreenChange() {
-        rebuildMenu()
+        // didChangeScreenParametersNotification fires before NSScreen.screens
+        // has been updated; defer to read the post-change layout.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.rebuildMenu()
+        }
     }
 
     private func rebuildMenu() {
@@ -65,18 +70,23 @@ final class MenuBarController: NSObject {
                 item.tag = n
                 menu.addItem(item)
             }
-            let prev = NSMenuItem(title: "把焦点窗口送到上一个显示器",
-                                  action: #selector(moveByDelta(_:)),
-                                  keyEquivalent: "")
-            prev.target = self
-            prev.tag = -1
-            menu.addItem(prev)
-            let next = NSMenuItem(title: "把焦点窗口送到下一个显示器",
-                                  action: #selector(moveByDelta(_:)),
-                                  keyEquivalent: "")
-            next.target = self
-            next.tag = +1
-            menu.addItem(next)
+            // Directional items, only shown if the current screen layout
+            // actually has a neighbour in that direction. Tag encodes the
+            // SpatialDirection raw position.
+            let directional: [(label: String, dir: SpatialDirection, tag: Int)] = [
+                ("把焦点窗口送到左侧显示器", .left,  0),
+                ("把焦点窗口送到右侧显示器", .right, 1),
+                ("把焦点窗口送到上方显示器", .up,    2),
+                ("把焦点窗口送到下方显示器", .down,  3),
+            ]
+            for entry in directional where ScreenGeometry.anyDisplayHasNeighbour(entry.dir) {
+                let item = NSMenuItem(title: entry.label,
+                                      action: #selector(moveInDirection(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.tag = entry.tag
+                menu.addItem(item)
+            }
         }
 
         menu.addItem(.separator())
@@ -129,8 +139,10 @@ final class MenuBarController: NSObject {
         onMoveToDisplay?(sender.tag)
     }
 
-    @objc private func moveByDelta(_ sender: NSMenuItem) {
-        onMoveByDelta?(sender.tag)
+    @objc private func moveInDirection(_ sender: NSMenuItem) {
+        let dirs: [SpatialDirection] = [.left, .right, .up, .down]
+        guard sender.tag >= 0, sender.tag < dirs.count else { return }
+        onMoveInDirection?(dirs[sender.tag])
     }
 
     @objc private func openTileRecorder() {

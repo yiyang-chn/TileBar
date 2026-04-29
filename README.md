@@ -63,8 +63,10 @@ TileBar prompts the first time you tile. Tick TileBar in **System Settings → P
 | **⌘⌥1** | Send focused window to display 1 (move + auto-retile) |
 | **⌘⌥2** | Display 2 |
 | **⌘⌥N** | Display N (up to 9, dynamically registered to match the actual display count) |
-| **⌘⌥→** | Send focused window to the next display (cyclic) |
-| **⌘⌥←** | Previous display (cyclic) |
+| **⌘⌥→** | Send focused window to the display physically to the right |
+| **⌘⌥←** | …to the left |
+| **⌘⌥↑** | …above |
+| **⌘⌥↓** | …below |
 
 Single-display setups skip the "send to display" hotkey block (digits and arrows alike) so `⌘⌥1` `⌘⌥←` etc. stay available to your browser. Hotkeys re-register automatically when displays are plugged or unplugged.
 
@@ -74,7 +76,11 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 Each display is squarified independently. A window is assigned to the display covering the largest portion of it (a window straddling two screens goes to the one with more area).
 
+The directional move hotkeys (⌘⌥←/→/↑/↓) follow the **physical arrangement** you set up in System Settings → Displays: the destination is the screen directly in that direction with overlap on the perpendicular axis. No display in that direction → no-op. Pressing → on the rightmost screen does **not** wrap around — that's by design; cycling can be done via the digit hotkeys.
+
 Cross-display moves use equiproportional remapping into the target's visibleFrame: the window keeps its relative position and size proportions from the source display.
+
+Moves are CG-verified (not just AX-trusted, since some apps' AX layers report success while their NSWindow controllers silently snap the window back). If the first AX move is rejected, the move is retried up to 5 times with short delays — Tencent WeChat / QQ in particular tend to accept the second or third attempt. A private `CGSMoveWindow` SPI is used as a final fallback.
 
 ### Changing hotkeys
 

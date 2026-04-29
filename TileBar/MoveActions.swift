@@ -1,18 +1,28 @@
 import Cocoa
 import ApplicationServices
 
+/// Snapshot of the currently-focused window across the AX layer. Capture
+/// once per user action and pass around — querying AX twice for the same
+/// window has been observed to put some apps (notably Tencent WeChat) into
+/// a state where the second query returns a stale reference whose moves
+/// get silently undone.
+struct FocusedWindow {
+    let pid: pid_t
+    let appName: String
+    let win: AXUIElement
+    let rect: CGRect
+    let screen: NSScreen
+    let displayIndex: Int
+}
+
 /// One-shot window manipulations that don't go through the tiling pipeline.
 enum MoveActions {
-    /// Compute the 1-indexed target display for the focused window after
-    /// shifting `delta` displays (with cyclic wrap-around). Returns nil if
-    /// the move can't be resolved (single display, no AX trust, no focused
-    /// window, focused window not on any screen).
-    static func computeTargetDisplay(delta: Int) -> Int? {
-        let screens = NSScreen.screens
-        guard screens.count >= 2 else { return nil }
+    /// Resolve the frontmost app's focused window in one AX traversal.
+    static func captureFocused() -> FocusedWindow? {
         guard AXIsProcessTrusted() else { return nil }
         guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
         let pid = app.processIdentifier
+        let appName = app.localizedName ?? "?"
         let axApp = AXUIElementCreateApplication(pid)
         var winRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(axApp,
@@ -21,67 +31,119 @@ enum MoveActions {
               let focused = winRef
         else { return nil }
         let win = focused as! AXUIElement
-        guard let currentRect = AXWindowMover.readRect(win),
-              let srcScreen = ScreenGeometry.screenContaining(currentRect),
-              let srcIdx = screens.firstIndex(of: srcScreen) else { return nil }
-        let n = screens.count
-        // Modulo for negative: ((a % n) + n) % n
-        let dstIdx = ((srcIdx + delta) % n + n) % n
+        guard let rect = AXWindowMover.readRect(win),
+              let screen = ScreenGeometry.screenContaining(rect)
+        else { return nil }
+        let dispIdx = ScreenGeometry.displayIndex(of: screen) ?? 0
+        return FocusedWindow(pid: pid, appName: appName, win: win,
+                             rect: rect, screen: screen, displayIndex: dispIdx)
+    }
+
+    /// Resolve the 1-indexed display sitting in `direction` from where
+    /// `focused` currently lives. Returns nil if no neighbour exists or
+    /// the focused window's screen isn't in `NSScreen.screens` anymore.
+    static func directionTarget(_ direction: SpatialDirection,
+                                from focused: FocusedWindow) -> Int? {
+        guard let dstScreen = ScreenGeometry.screen(direction, from: focused.screen),
+              let dstIdx = NSScreen.screens.firstIndex(of: dstScreen)
+        else {
+            Logger.log("no display in direction \(direction) from display \(focused.displayIndex)")
+            return nil
+        }
         return dstIdx + 1
     }
 
-    /// Move the focused window of the frontmost app to display N (1-indexed
-    /// against `NSScreen.screens`). Preserves the window's relative position
-    /// and size proportions within visibleFrame, so a window that filled
-    /// 60% of the source display ends up filling 60% of the destination.
-    /// No-op if:
-    ///   - AX permission is missing,
-    ///   - there's no frontmost app or no focused window,
-    ///   - `index` is out of range,
-    ///   - the focused window is already on display `index`.
-    static func moveFocusedWindowToDisplay(index: Int) {
-        guard AXIsProcessTrusted() else {
-            Logger.log("no AX trust"); return
-        }
+    /// Move the captured focused window to display `dstIndex` (1-indexed).
+    /// Equiproportional remap within visibleFrame. AX first; on apps that
+    /// silently undo AX moves (Tencent NSWindow handlers), fall back to
+    /// `CGSMoveWindow` (private SPI) to force the position. Position-only —
+    /// resizing will be reconciled by the auto-retile pass.
+    static func move(_ focused: FocusedWindow, toDisplay dstIndex: Int) {
         let screens = NSScreen.screens
-        guard index >= 1, index <= screens.count else {
-            Logger.log("display \(index) out of range (have \(screens.count))"); return
+        guard dstIndex >= 1, dstIndex <= screens.count else {
+            Logger.log("display \(dstIndex) out of range (have \(screens.count))")
+            return
         }
-        guard let app = NSWorkspace.shared.frontmostApplication else {
-            Logger.log("no frontmost app"); return
+        let dstScreen = screens[dstIndex - 1]
+        if dstScreen === focused.screen {
+            Logger.log("focused window already on display \(dstIndex)")
+            return
         }
-        let pid = app.processIdentifier
-        let axApp = AXUIElementCreateApplication(pid)
-        var winRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axApp,
-                                            kAXFocusedWindowAttribute as CFString,
-                                            &winRef) == .success,
-              let focused = winRef
-        else {
-            Logger.log("no focused window for pid=\(pid)"); return
-        }
-        let win = focused as! AXUIElement
-        guard let currentRect = AXWindowMover.readRect(win) else {
-            Logger.log("can't read focused window rect"); return
-        }
-        guard let srcScreen = ScreenGeometry.screenContaining(currentRect) else {
-            Logger.log("focused window on no screen?"); return
-        }
-        let dstScreen = screens[index - 1]
-        if dstScreen === srcScreen {
-            Logger.log("focused window already on display \(index)"); return
-        }
-        let srcVF = ScreenGeometry.cgVisibleFrame(of: srcScreen)
+        let srcVF = ScreenGeometry.cgVisibleFrame(of: focused.screen)
         let dstVF = ScreenGeometry.cgVisibleFrame(of: dstScreen)
-        let target = ScreenGeometry.remap(currentRect, from: srcVF, to: dstVF).integral
+        let target = ScreenGeometry.remap(focused.rect, from: srcVF, to: dstVF).integral
+        Logger.log("move pid=\(focused.pid) (\(focused.appName)) src=display\(focused.displayIndex) dst=display\(dstIndex) target=\(target)")
 
         // EUI dance: same workaround as the tile pipeline. Without it,
         // Electron apps reject the size change part of the move.
-        let prevEUI = AXWindowMover.setEnhancedUI(pid: pid, false)
+        let prevEUI = AXWindowMover.setEnhancedUI(pid: focused.pid, false)
         defer {
-            if let p = prevEUI { AXWindowMover.setEnhancedUI(pid: pid, p) }
+            if let p = prevEUI { AXWindowMover.setEnhancedUI(pid: focused.pid, p) }
         }
-        AXWindowMover.move(win, to: target)
-        Logger.log("moved focused window (pid=\(pid)) to display \(index)")
+
+        // Auto-retry AX move up to N times with a short delay between
+        // attempts. Tencent WeChat / QQ in particular tend to reject the
+        // first AX setPosition attempt (their NSWindow handler snaps the
+        // window back), but accept a subsequent one after their handler
+        // has settled. Single user action shouldn't require multiple
+        // hotkey presses, so we internalize the retry. CG window list is
+        // the ground truth for verification — AX readback can lie.
+        let maxAttempts = 5
+        var landed = false
+        for attempt in 1...maxAttempts {
+            if attempt > 1 {
+                Thread.sleep(forTimeInterval: 0.08)
+            }
+            AXWindowMover.move(focused.win, to: target)
+            if let cgRect = cgWindowRect(forPid: focused.pid, near: target),
+               let actualScreen = ScreenGeometry.screenContaining(cgRect) {
+                let actualIdx = ScreenGeometry.displayIndex(of: actualScreen) ?? 0
+                if actualIdx == dstIndex {
+                    Logger.log("move OK (AX, attempt \(attempt)): now on display \(dstIndex) at \(cgRect)")
+                    landed = true
+                    break
+                }
+            }
+        }
+
+        if !landed {
+            Logger.log("AX retried \(maxAttempts)× — falling back to CGS")
+            // Tencent-style fallback: go straight to WindowServer via the
+            // private CGSMoveWindow SPI. Position-only; the size stays
+            // whatever it was (sizing will be reconciled by the auto-
+            // retile pass that follows this action).
+            _ = AXWindowMover.cgsForceMove(focused.win, to: target.origin)
+            if let cgRect2 = cgWindowRect(forPid: focused.pid, near: target) {
+                let s2 = ScreenGeometry.screenContaining(cgRect2)
+                let i2 = s2.flatMap { ScreenGeometry.displayIndex(of: $0) } ?? 0
+                if i2 == dstIndex {
+                    Logger.log("move OK (CGS): now on display \(dstIndex) at \(cgRect2)")
+                } else {
+                    Logger.log("move FAILED (AX×\(maxAttempts) and CGS): on display\(i2) at \(cgRect2)")
+                }
+            }
+        }
+    }
+
+    /// Find the on-screen window of `pid` whose CG bounds are closest to
+    /// `near`. CG window list is the ground truth for actual position
+    /// (AX attribute reads can be stale or fabricated).
+    private static func cgWindowRect(forPid pid: pid_t, near: CGRect) -> CGRect? {
+        let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let list = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]]
+        else { return nil }
+        var best: (rect: CGRect, distance: CGFloat)?
+        for d in list {
+            guard let p = d[kCGWindowOwnerPID as String] as? pid_t, p == pid,
+                  let layer = d[kCGWindowLayer as String] as? Int, layer == 0,
+                  let bDict = d[kCGWindowBounds as String] as? [String: Any],
+                  let r = CGRect(dictionaryRepresentation: bDict as CFDictionary)
+            else { continue }
+            let dist = hypot(r.minX - near.minX, r.minY - near.minY)
+            if best == nil || dist < best!.distance {
+                best = (r, dist)
+            }
+        }
+        return best?.rect
     }
 }

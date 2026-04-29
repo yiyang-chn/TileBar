@@ -1,5 +1,12 @@
 import Cocoa
 
+/// One of the four spatial directions used by the "move focused window in
+/// direction X" hotkeys/menu items. Maps to the physical arrangement set
+/// up in System Settings → Displays.
+enum SpatialDirection {
+    case left, right, up, down
+}
+
 /// Display-related geometry helpers. Centralizes NS↔CG coordinate
 /// translation and "which display is this rect on?" decisions so the rest
 /// of the codebase doesn't have to remember which axis is flipped.
@@ -54,6 +61,61 @@ enum ScreenGeometry {
     /// hold Option.
     static func displayIndex(of screen: NSScreen) -> Int? {
         NSScreen.screens.firstIndex(of: screen).map { $0 + 1 }
+    }
+
+    /// Find the screen positioned in `direction` from `src` based on the
+    /// physical arrangement (NSScreen frames in CG coordinates). Requires
+    /// perpendicular overlap, so a screen purely diagonal from `src` won't
+    /// match either of the two perpendicular directions. Among multiple
+    /// candidates, prefers the one with the largest perpendicular overlap;
+    /// ties broken by smallest distance.
+    static func screen(_ direction: SpatialDirection, from src: NSScreen) -> NSScreen? {
+        let srcFrame = cgFrame(of: src)
+        var best: (screen: NSScreen, overlap: CGFloat, distance: CGFloat)?
+        for s in NSScreen.screens where s !== src {
+            let f = cgFrame(of: s)
+            let directionMatches: Bool
+            let distance: CGFloat
+            let overlap: CGFloat
+            switch direction {
+            case .left:
+                directionMatches = f.midX < srcFrame.midX
+                distance = abs(srcFrame.minX - f.maxX)
+                overlap = max(0, min(srcFrame.maxY, f.maxY) - max(srcFrame.minY, f.minY))
+            case .right:
+                directionMatches = f.midX > srcFrame.midX
+                distance = abs(f.minX - srcFrame.maxX)
+                overlap = max(0, min(srcFrame.maxY, f.maxY) - max(srcFrame.minY, f.minY))
+            case .up:
+                directionMatches = f.midY < srcFrame.midY
+                distance = abs(srcFrame.minY - f.maxY)
+                overlap = max(0, min(srcFrame.maxX, f.maxX) - max(srcFrame.minX, f.minX))
+            case .down:
+                directionMatches = f.midY > srcFrame.midY
+                distance = abs(f.minY - srcFrame.maxY)
+                overlap = max(0, min(srcFrame.maxX, f.maxX) - max(srcFrame.minX, f.minX))
+            }
+            guard directionMatches, overlap > 0 else { continue }
+            if let cur = best {
+                if overlap > cur.overlap
+                    || (overlap == cur.overlap && distance < cur.distance) {
+                    best = (s, overlap, distance)
+                }
+            } else {
+                best = (s, overlap, distance)
+            }
+        }
+        return best?.screen
+    }
+
+    /// True if any screen in the layout has a neighbour in `direction`.
+    /// Used by the menu to decide whether the directional item is worth
+    /// showing at all.
+    static func anyDisplayHasNeighbour(_ direction: SpatialDirection) -> Bool {
+        for s in NSScreen.screens {
+            if screen(direction, from: s) != nil { return true }
+        }
+        return false
     }
 
     /// Equiproportional remap of a window from one visibleFrame to another.

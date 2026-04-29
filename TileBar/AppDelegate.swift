@@ -14,7 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewTileHotkey(spec) }
         menuBar.onDisplayPrefixChanged = { [weak self] mods in self?.applyNewDisplayPrefix(mods) }
         menuBar.onMoveToDisplay = { idx in TilingActions.shared.moveFocusedToDisplay(idx) }
-        menuBar.onMoveByDelta = { delta in TilingActions.shared.moveFocusedByDelta(delta) }
+        menuBar.onMoveInDirection = { dir in TilingActions.shared.moveFocusedInDirection(dir) }
         menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
         currentConfig = AppConfigStore.load()
         registerAllHotkeys()
@@ -31,7 +31,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleScreenChange() {
         Logger.log("screens changed; re-registering display hotkeys")
-        registerDisplayHotkeys()
+        // didChangeScreenParametersNotification fires *before* NSScreen.screens
+        // has been updated to reflect the new layout (especially on hot-plug).
+        // Defer the actual registration so we read the post-change screen
+        // list, not the stale one.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.registerDisplayHotkeys()
+        }
     }
 
     private func registerAllHotkeys() {
@@ -68,13 +74,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Directional cycling: prefix + ←/→ for prev/next display, with wrap.
-        let directions: [(name: String, delta: Int)] = [("left", -1), ("right", +1)]
-        for (name, delta) in directions {
+        // Spatial directional moves: prefix + ←/→/↑/↓ → send focused
+        // window to the neighbouring display in that physical direction.
+        // No-op when no display sits in that direction.
+        let directions: [(name: String, dir: SpatialDirection)] = [
+            ("left",  .left),
+            ("right", .right),
+            ("up",    .up),
+            ("down",  .down),
+        ]
+        for (name, dir) in directions {
             guard let kc = KeyMap.keyCode(for: name) else { continue }
             let spec = HotkeySpec(keyCode: kc, modifiers: mods)
             if let id = HotkeyManager.shared.register(spec, action: {
-                TilingActions.shared.moveFocusedByDelta(delta)
+                TilingActions.shared.moveFocusedInDirection(dir)
             }) {
                 displayHotkeyIDs.append(id)
             }

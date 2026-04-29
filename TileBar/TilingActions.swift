@@ -44,12 +44,28 @@ final class TilingActions {
         self.post = result.post
     }
 
-    /// Send the focused window to the next/previous display (cyclic) AND
-    /// re-tile. `delta` is +1 for next, -1 for prev (or any integer for
-    /// multi-step wrap). Same atomicity guarantees as moveFocusedToDisplay.
-    func moveFocusedByDelta(_ delta: Int) {
-        guard let target = MoveActions.computeTargetDisplay(delta: delta) else { return }
-        moveFocusedToDisplay(target)
+    /// Send the focused window to the display physically positioned in
+    /// `direction` from the current one (left/right/up/down per the System
+    /// Settings → Displays arrangement). No-op if there's no display in
+    /// that direction. Same atomicity guarantees as moveFocusedToDisplay.
+    ///
+    /// Captures the focused window ONCE and reuses the snapshot for both
+    /// the direction calculation and the move. Querying AX's focused-window
+    /// attribute twice in quick succession has been observed to put some
+    /// apps (Tencent WeChat) into a state where the second query returns a
+    /// reference whose moves get silently undone — single-query is more
+    /// reliable.
+    func moveFocusedInDirection(_ direction: SpatialDirection) {
+        Logger.log("hotkey: direction \(direction)")
+        guard !inFlight else { Logger.log("  inFlight, skipping"); return }
+        guard NSScreen.screens.count >= 2 else { Logger.log("  single display"); return }
+        inFlight = true
+        defer {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.inFlight = false }
+        }
+        guard let focused = MoveActions.captureFocused() else { Logger.log("  no focused window"); return }
+        guard let target = MoveActions.directionTarget(direction, from: focused) else { return }
+        runMoveAndRetile(focused: focused, dstIndex: target)
     }
 
     /// Send the focused window to display N (1-indexed) AND re-tile every
@@ -59,16 +75,23 @@ final class TilingActions {
     ///   - `post` = the final tiled state after the auto-retile
     /// If only one display is connected, the action is a no-op.
     func moveFocusedToDisplay(_ index: Int) {
-        guard !inFlight else { return }
-        guard NSScreen.screens.count >= 2 else { return }
+        Logger.log("hotkey: digit \(index)")
+        guard !inFlight else { Logger.log("  inFlight, skipping"); return }
+        guard NSScreen.screens.count >= 2 else { Logger.log("  single display"); return }
         inFlight = true
         defer {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.inFlight = false }
         }
+        guard let focused = MoveActions.captureFocused() else { Logger.log("  no focused window"); return }
+        runMoveAndRetile(focused: focused, dstIndex: index)
+    }
+
+    /// Shared "capture pre-snapshot, move, retile, update toggle state"
+    /// path used by both moveFocusedToDisplay and moveFocusedInDirection.
+    /// `inFlight` is assumed already held by the caller.
+    private func runMoveAndRetile(focused: FocusedWindow, dstIndex: Int) {
         let preSnap = TilingPipeline.snapshot()
-        MoveActions.moveFocusedWindowToDisplay(index: index)
-        // Re-tile both displays so the receiving display absorbs the new
-        // window into its layout and the source display closes the gap.
+        MoveActions.move(focused, toDisplay: dstIndex)
         if let result = TilingPipeline.runTile() {
             self.pre = preSnap
             self.post = result.post

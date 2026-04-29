@@ -1,6 +1,29 @@
 import ApplicationServices
 import Cocoa
 
+// MARK: - Private CoreGraphics symbols
+//
+// `_AXUIElementGetWindow` and `CGSMoveWindow` are private SPI used by every
+// serious macOS window manager (Yabai, Hammerspoon, Magnet, Rectangle…) to
+// forcibly position windows belonging to apps whose own NSWindow controllers
+// ignore or undo AX-driven moves. Tencent's WeChat and QQ are the canonical
+// examples — their `windowDidMove:` handlers snap the window back to its
+// previous position immediately after every AX setPosition call. Going
+// through CoreGraphics' WindowServer layer is the only reliable way to
+// move them.
+
+@_silgen_name("_AXUIElementGetWindow")
+private func _AXUIElementGetWindow(_ element: AXUIElement,
+                                   _ outWindowID: UnsafeMutablePointer<UInt32>) -> AXError
+
+@_silgen_name("CGSMainConnectionID")
+private func CGSMainConnectionID() -> UInt32
+
+@_silgen_name("CGSMoveWindow")
+private func CGSMoveWindow(_ cid: UInt32,
+                           _ wid: UInt32,
+                           _ position: UnsafePointer<CGPoint>) -> Int32
+
 enum AXWindowMover {
     /// Toggle the private `AXEnhancedUserInterface` flag for an app. Electron
     /// apps (Slack, Discord, Claude desktop, VS Code, …) with this flag set
@@ -74,5 +97,28 @@ enum AXWindowMover {
             let r = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, v)
             if r != .success { Logger.log("AX setPos(2) err=\(r.rawValue)") }
         }
+    }
+
+    /// Force-move via CGSMoveWindow (private CoreGraphics API). Bypasses
+    /// NSWindow's `windowDidMove:` handlers, so it works on apps that
+    /// silently undo AX setPosition (Tencent WeChat/QQ, some older Java
+    /// apps). Position-only — size still has to go through AX setSize and
+    /// will be ignored by stubborn apps.
+    @discardableResult
+    static func cgsForceMove(_ axWin: AXUIElement, to point: CGPoint) -> Bool {
+        var wid: UInt32 = 0
+        let r = _AXUIElementGetWindow(axWin, &wid)
+        guard r == .success, wid != 0 else {
+            Logger.log("CGS: _AXUIElementGetWindow failed err=\(r.rawValue)")
+            return false
+        }
+        let cid = CGSMainConnectionID()
+        var p = point
+        let result = CGSMoveWindow(cid, wid, &p)
+        if result != 0 {
+            Logger.log("CGS: CGSMoveWindow returned \(result)")
+            return false
+        }
+        return true
     }
 }

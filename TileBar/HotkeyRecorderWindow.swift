@@ -118,10 +118,10 @@ final class HotkeyRecorderWindow: NSWindow {
         title = "设置移动窗口修饰键"
         promptLabel.stringValue = "按下含修饰键的组合（主键会被忽略）"
         hintLabel.stringValue = "保存后会与数字键 1/2/… 组合成「送到显示器 N」，"
-            + "并与方向键 ←/→ 组合成「送到上一个/下一个显示器」"
+            + "并与方向键 ←/→/↑/↓ 组合成「送到对应方向上的显示器」"
         capturedSpec = nil
         capturedMods = currentMods
-        captureLabel.stringValue = HotkeySpec.displayModifiers(currentMods) + "+1/2/…/←/→"
+        captureLabel.stringValue = HotkeySpec.displayModifiers(currentMods) + "+1/2/…/←/→/↑/↓"
         captureLabel.textColor = .secondaryLabelColor
         saveButton.isEnabled = false
         center()
@@ -176,7 +176,7 @@ final class HotkeyRecorderWindow: NSWindow {
 
         case .modifierOnly:
             capturedMods = usefulMods
-            captureLabel.stringValue = HotkeySpec.displayModifiers(usefulMods) + "+1/2/…/←/→"
+            captureLabel.stringValue = HotkeySpec.displayModifiers(usefulMods) + "+1/2/…/←/→/↑/↓"
         }
 
         captureLabel.textColor = .labelColor
