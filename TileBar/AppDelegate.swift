@@ -5,36 +5,83 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController!
     private var trustTimer: Timer?
     private var currentConfig = AppConfig.default
+    private var tileHotkeyID: UInt32?
+    private var displayHotkeyIDs: [UInt32] = []
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
         menuBar = MenuBarController()
-        menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewHotkey(spec) }
+        menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewTileHotkey(spec) }
+        menuBar.onDisplayPrefixChanged = { [weak self] mods in self?.applyNewDisplayPrefix(mods) }
+        menuBar.onMoveToDisplay = { idx in MoveActions.moveFocusedWindowToDisplay(index: idx) }
         menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
-        loadAndRegisterHotkey()
+        currentConfig = AppConfigStore.load()
+        registerAllHotkeys()
         ensureAXTrust()
+        // Re-register the per-display hotkey set whenever displays are
+        // added/removed so the digit count matches reality.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScreenChange),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil)
         Logger.log("launched")
     }
 
-    private func loadAndRegisterHotkey() {
-        currentConfig = AppConfigStore.load()
+    @objc private func handleScreenChange() {
+        Logger.log("screens changed; re-registering display hotkeys")
+        registerDisplayHotkeys()
+    }
+
+    private func registerAllHotkeys() {
+        registerTileHotkey()
+        registerDisplayHotkeys()
+    }
+
+    private func registerTileHotkey() {
+        if let id = tileHotkeyID { HotkeyManager.shared.unregister(id) }
         let spec = AppConfigStore.resolveHotkey(currentConfig)
-        HotkeyManager.shared.register(spec) {
+        tileHotkeyID = HotkeyManager.shared.register(spec) {
             TilingActions.shared.toggle()
+        }
+    }
+
+    private func registerDisplayHotkeys() {
+        for id in displayHotkeyIDs { HotkeyManager.shared.unregister(id) }
+        displayHotkeyIDs.removeAll()
+        let screens = NSScreen.screens
+        // Single display = no point grabbing the user's ⌘⌥1 globally.
+        guard screens.count >= 2 else { return }
+        let mods = AppConfigStore.resolveDisplayPrefix(currentConfig)
+        for (i, _) in screens.enumerated() {
+            let n = i + 1
+            guard n <= 9 else { break }
+            guard let kc = KeyMap.keyCode(for: "\(n)") else { continue }
+            let spec = HotkeySpec(keyCode: kc, modifiers: mods)
+            if let id = HotkeyManager.shared.register(spec, action: {
+                MoveActions.moveFocusedWindowToDisplay(index: n)
+            }) {
+                displayHotkeyIDs.append(id)
+            }
         }
     }
 
     private func reloadConfig() {
-        loadAndRegisterHotkey()
+        currentConfig = AppConfigStore.load()
+        registerAllHotkeys()
         Logger.log("config reloaded")
     }
 
-    private func applyNewHotkey(_ spec: HotkeySpec) {
+    private func applyNewTileHotkey(_ spec: HotkeySpec) {
         currentConfig.hotkey = spec.configString()
         AppConfigStore.save(currentConfig)
-        HotkeyManager.shared.register(spec) {
-            TilingActions.shared.toggle()
-        }
+        registerTileHotkey()
+    }
+
+    private func applyNewDisplayPrefix(_ mods: NSEvent.ModifierFlags) {
+        currentConfig.moveToDisplayPrefix = HotkeySpec.formatModifiers(mods)
+        AppConfigStore.save(currentConfig)
+        registerDisplayHotkeys()
     }
 
     private func ensureAXTrust() {

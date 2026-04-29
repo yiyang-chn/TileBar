@@ -20,7 +20,9 @@ enum WindowEnumerator {
         guard let list = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]]
         else { return [] }
 
-        let activeFrame = NSScreen.main?.frame ?? .zero
+        // Union of all connected screens in CG coords. A window must touch
+        // at least one of them to be considered "visible somewhere".
+        let cgScreens = NSScreen.screens.map { ScreenGeometry.cgFrame(of: $0) }
 
         return list.compactMap { d -> WindowInfo? in
             guard let layer = d[kCGWindowLayer as String] as? Int, layer == 0,
@@ -34,7 +36,7 @@ enum WindowEnumerator {
             else { return nil }
 
             guard rect.width * rect.height > 5000 else { return nil }
-            guard rect.intersects(activeFrame) else { return nil }
+            guard cgScreens.contains(where: { $0.intersects(rect) }) else { return nil }
 
             let bid = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
             return WindowInfo(pid: pid, cgWindowID: wid, bundleID: bid,

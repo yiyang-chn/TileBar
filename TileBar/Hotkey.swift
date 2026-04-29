@@ -33,13 +33,7 @@ struct HotkeySpec: Equatable {
 
     /// Pretty display string with macOS modifier glyphs, e.g. "⌘⌥T".
     func displayString() -> String {
-        var s = ""
-        if modifiers.contains(.control) { s += "⌃" }
-        if modifiers.contains(.option)  { s += "⌥" }
-        if modifiers.contains(.shift)   { s += "⇧" }
-        if modifiers.contains(.command) { s += "⌘" }
-        s += (KeyMap.name(for: keyCode) ?? "?").uppercased()
-        return s
+        HotkeySpec.displayModifiers(modifiers) + (KeyMap.name(for: keyCode) ?? "?").uppercased()
     }
 
     /// Parse "cmd+opt+t" / "Ctrl+Shift+F1" / etc. Returns nil on any parse
@@ -68,6 +62,49 @@ struct HotkeySpec: Equatable {
               let kc = KeyMap.keyCode(for: k),
               !mods.isEmpty else { return nil }
         return HotkeySpec(keyCode: kc, modifiers: mods)
+    }
+
+    /// Parse "cmd+opt" / "ctrl+shift" — modifier keys only, no main key.
+    /// Used for the per-display move hotkey prefix where the digit is
+    /// implicit (1, 2, ..., N for each display). At least one of
+    /// cmd/opt/ctrl is required (shift alone isn't a strong-enough trigger
+    /// for a global hotkey).
+    static func parseModifiersOnly(_ raw: String) -> NSEvent.ModifierFlags? {
+        let parts = raw.lowercased().split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard !parts.isEmpty else { return nil }
+        var mods: NSEvent.ModifierFlags = []
+        for p in parts {
+            switch p {
+            case "cmd", "command", "⌘": mods.insert(.command)
+            case "opt", "option", "alt", "⌥": mods.insert(.option)
+            case "ctrl", "control", "⌃": mods.insert(.control)
+            case "shift", "⇧": mods.insert(.shift)
+            default: return nil
+            }
+        }
+        guard mods.contains(.command) || mods.contains(.option) || mods.contains(.control)
+        else { return nil }
+        return mods
+    }
+
+    /// Canonical "cmd+opt" string for a modifier-only set.
+    static func formatModifiers(_ mods: NSEvent.ModifierFlags) -> String {
+        var parts: [String] = []
+        if mods.contains(.control) { parts.append("ctrl") }
+        if mods.contains(.option)  { parts.append("opt") }
+        if mods.contains(.shift)   { parts.append("shift") }
+        if mods.contains(.command) { parts.append("cmd") }
+        return parts.joined(separator: "+")
+    }
+
+    /// Glyph form "⌘⌥" for a modifier-only set.
+    static func displayModifiers(_ mods: NSEvent.ModifierFlags) -> String {
+        var s = ""
+        if mods.contains(.control) { s += "⌃" }
+        if mods.contains(.option)  { s += "⌥" }
+        if mods.contains(.shift)   { s += "⇧" }
+        if mods.contains(.command) { s += "⌘" }
+        return s
     }
 }
 
@@ -114,24 +151,35 @@ enum KeyMap {
     }
 }
 
-/// Owns the single Carbon EventHotKey registration. Re-register to swap
-/// hotkeys at runtime; the previous registration is unregistered first.
+/// Carbon-backed registry for one or more global hotkeys. Each register()
+/// call returns a token (UInt32 id) that can be passed to unregister() to
+/// release just that hotkey, leaving any others intact. Used by:
+///   - the tile hotkey (single, replaces itself when reconfigured)
+///   - the per-display move hotkeys (1..N, re-registered en masse on
+///     display plug/unplug or prefix change).
 final class HotkeyManager {
     static let shared = HotkeyManager()
 
-    private var hotKeyRef: EventHotKeyRef?
-    private var handler: (() -> Void)?
+    private struct Entry {
+        let ref: EventHotKeyRef
+        let handler: () -> Void
+    }
+
+    private var entries: [UInt32: Entry] = [:]
+    private var nextID: UInt32 = 1
     private var installedHandler = false
 
     /// Carbon four-char code "TLBR" identifying our hotkey events.
     private static let signature: OSType = 0x544C4252
 
-    func register(_ spec: HotkeySpec, action: @escaping () -> Void) {
+    /// Register a hotkey. Returns the token used for later unregister(), or
+    /// nil if Carbon refused (key already taken, malformed spec, etc.).
+    @discardableResult
+    func register(_ spec: HotkeySpec, action: @escaping () -> Void) -> UInt32? {
         installEventHandlerIfNeeded()
-        unregister()
-        self.handler = action
-
-        let hkID = EventHotKeyID(signature: HotkeyManager.signature, id: 1)
+        let id = nextID
+        nextID += 1
+        let hkID = EventHotKeyID(signature: HotkeyManager.signature, id: id)
         var ref: EventHotKeyRef?
         let st = RegisterEventHotKey(spec.keyCode,
                                      spec.carbonModifiers,
@@ -139,18 +187,20 @@ final class HotkeyManager {
                                      GetApplicationEventTarget(),
                                      0,
                                      &ref)
-        if st == noErr {
-            self.hotKeyRef = ref
-            Logger.log("hotkey registered: \(spec.configString())")
+        if st == noErr, let ref = ref {
+            entries[id] = Entry(ref: ref, handler: action)
+            Logger.log("hotkey #\(id) registered: \(spec.configString())")
+            return id
         } else {
-            Logger.log("hotkey register failed (status=\(st)) for \(spec.configString())")
+            Logger.log("hotkey register failed (\(spec.configString()) status=\(st))")
+            return nil
         }
     }
 
-    func unregister() {
-        if let ref = hotKeyRef {
-            UnregisterEventHotKey(ref)
-            hotKeyRef = nil
+    /// Release a previously-registered hotkey. No-op if `id` is unknown.
+    func unregister(_ id: UInt32) {
+        if let e = entries.removeValue(forKey: id) {
+            UnregisterEventHotKey(e.ref)
         }
     }
 
@@ -160,10 +210,19 @@ final class HotkeyManager {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                  eventKind: UInt32(kEventHotKeyPressed))
         let userData = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
-            guard let userData = userData else { return noErr }
+        InstallEventHandler(GetApplicationEventTarget(), { _, eventRef, userData in
+            guard let userData = userData, let eventRef = eventRef else { return noErr }
+            var hkID = EventHotKeyID()
+            GetEventParameter(eventRef,
+                              EventParamName(kEventParamDirectObject),
+                              EventParamType(typeEventHotKeyID),
+                              nil,
+                              MemoryLayout<EventHotKeyID>.size,
+                              nil,
+                              &hkID)
             let me = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-            DispatchQueue.main.async { me.handler?() }
+            let handler = me.entries[hkID.id]?.handler
+            DispatchQueue.main.async { handler?() }
             return noErr
         }, 1, &spec, userData, nil)
     }

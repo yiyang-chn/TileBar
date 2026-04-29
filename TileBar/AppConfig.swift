@@ -1,11 +1,20 @@
 import Foundation
+import Cocoa
 
-/// Persistent user config at ~/.tilebar.json. Currently just the hotkey, but
-/// designed to grow (coefficients, exclude list, etc.).
+/// Persistent user config at ~/.tilebar.json. Currently the tile hotkey and
+/// the modifier prefix used for "move focused window to display N" hotkeys.
 struct AppConfig: Codable {
     var hotkey: String
+    /// Modifier-only string like "cmd+opt". Combined at runtime with digit
+    /// keys 1..N (where N = display count) to form per-display hotkeys.
+    /// Optional in JSON for forward compatibility — old configs that
+    /// predate this field still load fine and pick up the default.
+    var moveToDisplayPrefix: String?
 
-    static let `default` = AppConfig(hotkey: HotkeySpec.default.configString())
+    static let `default` = AppConfig(
+        hotkey: HotkeySpec.default.configString(),
+        moveToDisplayPrefix: "cmd+opt"
+    )
 }
 
 enum AppConfigStore {
@@ -51,5 +60,14 @@ enum AppConfigStore {
         if let s = HotkeySpec.parse(config.hotkey) { return s }
         Logger.log("invalid hotkey '\(config.hotkey)', using default")
         return .default
+    }
+
+    /// Resolve the modifier prefix used for per-display move hotkeys.
+    /// Falls back to cmd+opt on parse failure or missing field.
+    static func resolveDisplayPrefix(_ config: AppConfig) -> NSEvent.ModifierFlags {
+        let str = config.moveToDisplayPrefix ?? "cmd+opt"
+        if let mods = HotkeySpec.parseModifiersOnly(str) { return mods }
+        Logger.log("invalid moveToDisplayPrefix '\(str)', using cmd+opt")
+        return [.command, .option]
     }
 }

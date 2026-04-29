@@ -143,29 +143,43 @@ enum TilingPipeline {
     /// few-pixel slack avoids spinning forever for "almost there" layouts.
     private static let overflowSlack: CGFloat = 10
 
-    /// Tile all visible app windows on the main screen. Returns the (pre, post)
-    /// snapshots: `pre` is the state before tiling (used for undo), `post` is
-    /// the actual state after tiling+reflow (used to detect "the user has not
-    /// moved any window since we tiled").
+    /// Tile all visible app windows across all connected displays. Each
+    /// display's windows are squarified independently within that display's
+    /// visibleFrame. Returns the (pre, post) snapshots: `pre` is the state
+    /// before tiling (used for undo), `post` is the actual state after
+    /// tiling+reflow (used to detect "the user has not moved any window
+    /// since we tiled").
     @discardableResult
     static func runTile() -> (pre: WindowSnapshot, post: WindowSnapshot)? {
         guard AXIsProcessTrusted() else { Logger.log("no AX trust"); return nil }
-        guard let screen = NSScreen.main else { Logger.log("no main screen"); return nil }
-        let vf = screen.visibleFrame, sf = screen.frame
-        let cgBounds = CGRect(x: vf.minX, y: sf.height - vf.maxY,
-                              width: vf.width, height: vf.height)
+        guard !NSScreen.screens.isEmpty else { Logger.log("no screens"); return nil }
 
         let wins = WindowEnumerator.visibleAppWindows()
         guard !wins.isEmpty else { Logger.log("no windows"); return nil }
 
-        let pre = capturePairs(for: wins)
+        // Group windows by their primary (max-area) display. Skip windows
+        // that don't intersect any screen at all (off-screen / minimized).
+        var groups: [ObjectIdentifier: (screen: NSScreen, wins: [WindowInfo])] = [:]
+        for w in wins {
+            guard let screen = ScreenGeometry.screenContaining(w.bounds) else { continue }
+            let key = ObjectIdentifier(screen)
+            if var g = groups[key] {
+                g.wins.append(w)
+                groups[key] = g
+            } else {
+                groups[key] = (screen, [w])
+            }
+        }
+        let groupedWins = groups.values.flatMap { $0.wins }
+        guard !groupedWins.isEmpty else { Logger.log("no windows on any screen"); return nil }
+
+        let pre = capturePairs(for: groupedWins)
         guard !pre.entries.isEmpty else { return nil }
         let widToAX = Dictionary(uniqueKeysWithValues: pre.entries.map { ($0.cgWindowID, $0.ax) })
 
-        // Disable AXEnhancedUserInterface for the whole batch — this is what
-        // forces Electron apps (Slack/Claude/Discord) to actually obey
-        // setSize. Restore at the end via defer.
-        let pidsTouched = Set(wins.map { $0.pid })
+        // Disable AXEnhancedUserInterface for the whole batch — Electron apps
+        // (Slack/Claude/Discord) silently ignore AX setSize without this.
+        let pidsTouched = Set(groupedWins.map { $0.pid })
         var prevEUI: [pid_t: Bool] = [:]
         for pid in pidsTouched {
             if let prev = AXWindowMover.setEnhancedUI(pid: pid, false) {
@@ -179,42 +193,46 @@ enum TilingPipeline {
         }
 
         var weights: [CGWindowID: Double] = [:]
-        for w in wins { weights[w.cgWindowID] = ContentMeasurer.weight(for: w) }
+        for w in groupedWins { weights[w.cgWindowID] = ContentMeasurer.weight(for: w) }
 
         var prevOverflowPx = CGFloat.infinity
         for attempt in 1...maxIterations {
-            let items = wins.compactMap { w -> (WindowInfo, Double)? in
-                guard widToAX[w.cgWindowID] != nil else { return nil }
-                return (w, weights[w.cgWindowID] ?? 1.0)
-            }
-            let plan = TilingEngine.tile(items, in: cgBounds)
-            for t in plan {
-                guard let ax = widToAX[t.cgWindowID] else { continue }
-                AXWindowMover.move(ax, to: t.target)
-            }
             var overflows = 0
             var overflowPx: CGFloat = 0
-            for t in plan {
-                guard let ax = widToAX[t.cgWindowID],
-                      let actual = AXWindowMover.readRect(ax) else { continue }
-                let ovW = max(0, actual.width - t.target.width)
-                let ovH = max(0, actual.height - t.target.height)
-                if ovW > overflowSlack || ovH > overflowSlack {
-                    let factor = Double(actual.width * actual.height)
-                                / max(1, Double(t.target.width * t.target.height))
-                    weights[t.cgWindowID] = (weights[t.cgWindowID] ?? 1.0) * factor
-                    overflows += 1
-                    overflowPx += ovW + ovH
+
+            for (_, group) in groups {
+                let bounds = ScreenGeometry.cgVisibleFrame(of: group.screen)
+                let items = group.wins.compactMap { w -> (WindowInfo, Double)? in
+                    guard widToAX[w.cgWindowID] != nil else { return nil }
+                    return (w, weights[w.cgWindowID] ?? 1.0)
+                }
+                let plan = TilingEngine.tile(items, in: bounds)
+                for t in plan {
+                    guard let ax = widToAX[t.cgWindowID] else { continue }
+                    AXWindowMover.move(ax, to: t.target)
+                }
+                for t in plan {
+                    guard let ax = widToAX[t.cgWindowID],
+                          let actual = AXWindowMover.readRect(ax) else { continue }
+                    let ovW = max(0, actual.width - t.target.width)
+                    let ovH = max(0, actual.height - t.target.height)
+                    if ovW > overflowSlack || ovH > overflowSlack {
+                        let factor = Double(actual.width * actual.height)
+                                    / max(1, Double(t.target.width * t.target.height))
+                        weights[t.cgWindowID] = (weights[t.cgWindowID] ?? 1.0) * factor
+                        overflows += 1
+                        overflowPx += ovW + ovH
+                    }
                 }
             }
+
             if overflows == 0 {
                 Logger.log("tile converged in \(attempt)")
                 break
             }
-            // Early exit: stop only when the total overflow PIXEL magnitude
-            // isn't getting meaningfully smaller (< 5% improvement). Counting
-            // overflowing windows alone is too coarse: a stubborn-but-shrinking
-            // overflow shouldn't trigger a give-up.
+            // Magnitude-based early exit: a stubborn overflow that keeps
+            // shrinking is fine; one that plateaus means we're geometrically
+            // stuck and more iterations won't help.
             if overflowPx > prevOverflowPx * 0.95 {
                 Logger.log("tile stalled at \(attempt) (overflows=\(overflows) px=\(Int(overflowPx)))")
                 break

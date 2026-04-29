@@ -20,6 +20,8 @@
 		B00000000000000000000F0D /* Hotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0D /* Hotkey.swift */; };
 		B00000000000000000000F0E /* TilingActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0E /* TilingActions.swift */; };
 		B00000000000000000000F0F /* HotkeyRecorderWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0F /* HotkeyRecorderWindow.swift */; };
+		B00000000000000000000F10 /* ScreenGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F10 /* ScreenGeometry.swift */; };
+		B00000000000000000000F11 /* MoveActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F11 /* MoveActions.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +40,8 @@
 		A00000000000000000000F0D /* Hotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotkey.swift; sourceTree = "<group>"; };
 		A00000000000000000000F0E /* TilingActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingActions.swift; sourceTree = "<group>"; };
 		A00000000000000000000F0F /* HotkeyRecorderWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderWindow.swift; sourceTree = "<group>"; };
+		A00000000000000000000F10 /* ScreenGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenGeometry.swift; sourceTree = "<group>"; };
+		A00000000000000000000F11 /* MoveActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveActions.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +74,8 @@
 				A00000000000000000000F05 /* ContentMeasurer.swift */,
 				A00000000000000000000F06 /* TilingEngine.swift */,
 				A00000000000000000000F0E /* TilingActions.swift */,
+				A00000000000000000000F11 /* MoveActions.swift */,
+				A00000000000000000000F10 /* ScreenGeometry.swift */,
 				A00000000000000000000F0C /* AppConfig.swift */,
 				A00000000000000000000F0D /* Hotkey.swift */,
 				A00000000000000000000F0F /* HotkeyRecorderWindow.swift */,
@@ -165,6 +171,8 @@
 				B00000000000000000000F05 /* ContentMeasurer.swift in Sources */,
 				B00000000000000000000F06 /* TilingEngine.swift in Sources */,
 				B00000000000000000000F0E /* TilingActions.swift in Sources */,
+				B00000000000000000000F11 /* MoveActions.swift in Sources */,
+				B00000000000000000000F10 /* ScreenGeometry.swift in Sources */,
 				B00000000000000000000F0C /* AppConfig.swift in Sources */,
 				B00000000000000000000F0D /* Hotkey.swift in Sources */,
 				B00000000000000000000F0F /* HotkeyRecorderWindow.swift in Sources */,

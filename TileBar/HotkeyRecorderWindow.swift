@@ -1,8 +1,15 @@
 import Cocoa
 
-/// Modal-ish recorder window. Activates the app, captures the next valid
-/// keystroke (≥1 modifier + a non-modifier key), shows it, and on Save
-/// persists to ~/.tilebar.json + re-registers the global hotkey.
+/// Two-mode hotkey recorder.
+/// - `.fullKey`     captures modifier+key combos like ⌘⌥T (used for tile/undo).
+/// - `.modifierOnly` captures only the modifier portion like ⌘⌥; the user
+///   still presses some main key to confirm but we discard it. Used for
+///   the per-display move prefix.
+enum HotkeyRecorderMode {
+    case fullKey
+    case modifierOnly
+}
+
 final class HotkeyRecorderWindow: NSWindow {
     private let promptLabel = NSTextField(labelWithString: "请按下你想要的组合键")
     private let captureLabel = NSTextField(labelWithString: "—")
@@ -10,9 +17,15 @@ final class HotkeyRecorderWindow: NSWindow {
     private let saveButton = NSButton(title: "保存", target: nil, action: nil)
     private let cancelButton = NSButton(title: "取消", target: nil, action: nil)
 
-    private var captured: HotkeySpec?
+    private var mode: HotkeyRecorderMode = .fullKey
+    private var capturedSpec: HotkeySpec?
+    private var capturedMods: NSEvent.ModifierFlags?
     private var keyMonitor: Any?
+
+    /// Fired when the user saves a full hotkey (mode = .fullKey).
     var onSave: ((HotkeySpec) -> Void)?
+    /// Fired when the user saves a modifier-only prefix (mode = .modifierOnly).
+    var onSaveModifiers: ((NSEvent.ModifierFlags) -> Void)?
 
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 380, height: 200),
@@ -80,11 +93,35 @@ final class HotkeyRecorderWindow: NSWindow {
         ])
     }
 
-    /// Show the recorder, pre-fill it with the current hotkey, and start
-    /// capturing keystrokes.
+    /// Show as full-hotkey recorder. Pre-fills with the current binding.
     func show(currentHotkey: HotkeySpec) {
-        captured = currentHotkey
+        mode = .fullKey
+        title = "设置平铺快捷键"
+        promptLabel.stringValue = "请按下你想要的组合键"
+        hintLabel.stringValue = "需要至少包含 ⌘/⌃/⌥/⇧ 中的一个修饰键"
+        capturedSpec = currentHotkey
+        capturedMods = nil
         captureLabel.stringValue = currentHotkey.displayString()
+        captureLabel.textColor = .secondaryLabelColor
+        saveButton.isEnabled = false
+        center()
+        NSApp.activate(ignoringOtherApps: true)
+        makeKeyAndOrderFront(nil)
+        startCapturing()
+    }
+
+    /// Show as modifier-only recorder. The user presses any combo; we keep
+    /// only the modifier part and discard the main key. Display previews
+    /// the prefix with the digit slot, e.g. ⌘⌥+1/2/3…
+    func showModifierOnly(currentMods: NSEvent.ModifierFlags) {
+        mode = .modifierOnly
+        title = "设置移动窗口修饰键"
+        promptLabel.stringValue = "按下含修饰键的组合（主键会被忽略）"
+        hintLabel.stringValue = "保存后，会和数字键 1/2/3… 组合成"
+            + "「焦点窗口送到显示器 N」的快捷键"
+        capturedSpec = nil
+        capturedMods = currentMods
+        captureLabel.stringValue = HotkeySpec.displayModifiers(currentMods) + "+1/2/3…"
         captureLabel.textColor = .secondaryLabelColor
         saveButton.isEnabled = false
         center()
@@ -111,14 +148,11 @@ final class HotkeyRecorderWindow: NSWindow {
         }
     }
 
-    /// Returns true if the event was a valid hotkey keystroke (consumed),
-    /// false otherwise (let it through to default handling).
+    /// Returns true if the event was consumed.
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let acceptable: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
         let usefulMods = mods.intersection(acceptable)
-        // Need at least one of cmd/opt/ctrl. shift alone isn't enough as a
-        // global hotkey trigger.
         let strongMods = usefulMods.intersection([.command, .option, .control])
         guard !strongMods.isEmpty else {
             captureLabel.stringValue = "需要 ⌘/⌃/⌥ 中的至少一个"
@@ -126,25 +160,38 @@ final class HotkeyRecorderWindow: NSWindow {
             saveButton.isEnabled = false
             return true
         }
-        let keyCode = UInt32(event.keyCode)
-        guard KeyMap.name(for: keyCode) != nil else {
-            captureLabel.stringValue = "不支持这个键"
-            captureLabel.textColor = .systemRed
-            saveButton.isEnabled = false
-            return true
+
+        switch mode {
+        case .fullKey:
+            let keyCode = UInt32(event.keyCode)
+            guard KeyMap.name(for: keyCode) != nil else {
+                captureLabel.stringValue = "不支持这个键"
+                captureLabel.textColor = .systemRed
+                saveButton.isEnabled = false
+                return true
+            }
+            let spec = HotkeySpec(keyCode: keyCode, modifiers: usefulMods)
+            capturedSpec = spec
+            captureLabel.stringValue = spec.displayString()
+
+        case .modifierOnly:
+            capturedMods = usefulMods
+            captureLabel.stringValue = HotkeySpec.displayModifiers(usefulMods) + "+1/2/3…"
         }
-        let spec = HotkeySpec(keyCode: keyCode, modifiers: usefulMods)
-        captured = spec
-        captureLabel.stringValue = spec.displayString()
+
         captureLabel.textColor = .labelColor
         saveButton.isEnabled = true
         return true
     }
 
     @objc private func saveTapped() {
-        guard let spec = captured else { return }
         stopCapturing()
-        onSave?(spec)
+        switch mode {
+        case .fullKey:
+            if let s = capturedSpec { onSave?(s) }
+        case .modifierOnly:
+            if let m = capturedMods { onSaveModifiers?(m) }
+        }
         close()
     }
 
