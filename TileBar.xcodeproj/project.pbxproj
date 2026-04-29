@@ -16,7 +16,10 @@
 		B00000000000000000000F07 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F07 /* Logger.swift */; };
 		B00000000000000000000F09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F09 /* Assets.xcassets */; };
 		B00000000000000000000F0B /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0B /* main.swift */; };
+		B00000000000000000000F0C /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0C /* AppConfig.swift */; };
+		B00000000000000000000F0D /* Hotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0D /* Hotkey.swift */; };
 		B00000000000000000000F0E /* TilingActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0E /* TilingActions.swift */; };
+		B00000000000000000000F0F /* HotkeyRecorderWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F0F /* HotkeyRecorderWindow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,7 +34,10 @@
 		A00000000000000000000F09 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000F0A /* TileBar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TileBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000F0B /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		A00000000000000000000F0C /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		A00000000000000000000F0D /* Hotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotkey.swift; sourceTree = "<group>"; };
 		A00000000000000000000F0E /* TilingActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingActions.swift; sourceTree = "<group>"; };
+		A00000000000000000000F0F /* HotkeyRecorderWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderWindow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +70,9 @@
 				A00000000000000000000F05 /* ContentMeasurer.swift */,
 				A00000000000000000000F06 /* TilingEngine.swift */,
 				A00000000000000000000F0E /* TilingActions.swift */,
+				A00000000000000000000F0C /* AppConfig.swift */,
+				A00000000000000000000F0D /* Hotkey.swift */,
+				A00000000000000000000F0F /* HotkeyRecorderWindow.swift */,
 				A00000000000000000000F07 /* Logger.swift */,
 				A00000000000000000000F09 /* Assets.xcassets */,
 				A00000000000000000000F08 /* Info.plist */,
@@ -156,6 +165,9 @@
 				B00000000000000000000F05 /* ContentMeasurer.swift in Sources */,
 				B00000000000000000000F06 /* TilingEngine.swift in Sources */,
 				B00000000000000000000F0E /* TilingActions.swift in Sources */,
+				B00000000000000000000F0C /* AppConfig.swift in Sources */,
+				B00000000000000000000F0D /* Hotkey.swift in Sources */,
+				B00000000000000000000F0F /* HotkeyRecorderWindow.swift in Sources */,
 				B00000000000000000000F07 /* Logger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

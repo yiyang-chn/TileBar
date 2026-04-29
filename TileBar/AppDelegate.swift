@@ -4,12 +4,37 @@ import ApplicationServices
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController!
     private var trustTimer: Timer?
+    private var currentConfig = AppConfig.default
 
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
         menuBar = MenuBarController()
+        menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewHotkey(spec) }
+        menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
+        loadAndRegisterHotkey()
         ensureAXTrust()
         Logger.log("launched")
+    }
+
+    private func loadAndRegisterHotkey() {
+        currentConfig = AppConfigStore.load()
+        let spec = AppConfigStore.resolveHotkey(currentConfig)
+        HotkeyManager.shared.register(spec) {
+            TilingActions.shared.toggle()
+        }
+    }
+
+    private func reloadConfig() {
+        loadAndRegisterHotkey()
+        Logger.log("config reloaded")
+    }
+
+    private func applyNewHotkey(_ spec: HotkeySpec) {
+        currentConfig.hotkey = spec.configString()
+        AppConfigStore.save(currentConfig)
+        HotkeyManager.shared.register(spec) {
+            TilingActions.shared.toggle()
+        }
     }
 
     private func ensureAXTrust() {

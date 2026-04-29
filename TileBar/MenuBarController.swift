@@ -3,6 +3,15 @@ import Cocoa
 final class MenuBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
+    private var recorder: HotkeyRecorderWindow?
+
+    /// Called when the user wants to change the hotkey. The AppDelegate
+    /// handles the actual save+register step.
+    var onHotkeyChanged: ((HotkeySpec) -> Void)?
+
+    /// Called when the user picks "重新加载配置". The AppDelegate re-reads
+    /// the file and re-registers the hotkey.
+    var onReloadConfig: (() -> Void)?
 
     override init() {
         super.init()
@@ -18,9 +27,15 @@ final class MenuBarController: NSObject {
         tile.target = self
         menu.addItem(tile)
 
-        let reset = NSMenuItem(title: "重置", action: nil, keyEquivalent: "")
-        reset.isEnabled = false
-        menu.addItem(reset)
+        menu.addItem(.separator())
+
+        let setHotkey = NSMenuItem(title: "设置快捷键…", action: #selector(openRecorder), keyEquivalent: "")
+        setHotkey.target = self
+        menu.addItem(setHotkey)
+
+        let reload = NSMenuItem(title: "重新加载配置", action: #selector(reloadConfig), keyEquivalent: "")
+        reload.target = self
+        menu.addItem(reload)
 
         menu.addItem(.separator())
 
@@ -44,6 +59,21 @@ final class MenuBarController: NSObject {
 
     @objc private func tileNow() {
         TilingActions.shared.tileNow()
+    }
+
+    @objc private func openRecorder() {
+        if recorder == nil { recorder = HotkeyRecorderWindow() }
+        guard let w = recorder else { return }
+        w.onSave = { [weak self] spec in
+            self?.onHotkeyChanged?(spec)
+        }
+        let cfg = AppConfigStore.load()
+        let current = AppConfigStore.resolveHotkey(cfg)
+        w.show(currentHotkey: current)
+    }
+
+    @objc private func reloadConfig() {
+        onReloadConfig?()
     }
 
     @objc private func quit() {
