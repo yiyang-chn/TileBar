@@ -243,6 +243,37 @@ enum TilingPipeline {
             }
         }
 
+        // Post-tile clamp: any window whose final rect overflows its
+        // display's visibleFrame gets pulled back inside, *position only*.
+        // This catches stubborn apps (Tencent QQ/WeChat, certain Electron
+        // builds) that ignore AX setSize. The window stays its actual size
+        // and may end up overlapping a neighbor — overlap is unavoidable
+        // when the sum of stubborn sizes exceeds the display — but at
+        // least no part of any window ends up off-screen.
+        for (_, group) in groups {
+            let vf = ScreenGeometry.cgVisibleFrame(of: group.screen)
+            for w in group.wins {
+                guard let ax = widToAX[w.cgWindowID],
+                      let actual = AXWindowMover.readRect(ax) else { continue }
+                var newOrigin = actual.origin
+                if actual.maxX > vf.maxX {
+                    newOrigin.x = max(vf.minX, vf.maxX - actual.width)
+                }
+                if actual.minX < vf.minX {
+                    newOrigin.x = vf.minX
+                }
+                if actual.maxY > vf.maxY {
+                    newOrigin.y = max(vf.minY, vf.maxY - actual.height)
+                }
+                if actual.minY < vf.minY {
+                    newOrigin.y = vf.minY
+                }
+                if newOrigin != actual.origin {
+                    AXWindowMover.move(ax, to: CGRect(origin: newOrigin, size: actual.size))
+                }
+            }
+        }
+
         let post = WindowSnapshot(entries: pre.entries.compactMap { e in
             AXWindowMover.readRect(e.ax).map {
                 WindowSnapshot.Entry(ax: e.ax, cgWindowID: e.cgWindowID, rect: $0)
@@ -275,6 +306,14 @@ enum TilingPipeline {
             var pid: pid_t = 0
             return AXUIElementGetPid(e.ax, &pid) == .success ? pid : nil
         }
+    }
+
+    /// Capture every visible app window's current AX rect. Used by callers
+    /// that need a "pre" snapshot for actions whose entry path doesn't go
+    /// through runTile() (e.g. a move-then-retile action wants its own pre
+    /// to reflect the state *before the move*, not before the retile).
+    static func snapshot() -> WindowSnapshot {
+        capturePairs(for: WindowEnumerator.visibleAppWindows())
     }
 
     /// True if every window in `snapshot` is currently within `tolerance`

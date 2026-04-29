@@ -13,7 +13,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar = MenuBarController()
         menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewTileHotkey(spec) }
         menuBar.onDisplayPrefixChanged = { [weak self] mods in self?.applyNewDisplayPrefix(mods) }
-        menuBar.onMoveToDisplay = { idx in MoveActions.moveFocusedWindowToDisplay(index: idx) }
+        menuBar.onMoveToDisplay = { idx in TilingActions.shared.moveFocusedToDisplay(idx) }
         menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
         currentConfig = AppConfigStore.load()
         registerAllHotkeys()
@@ -59,7 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let kc = KeyMap.keyCode(for: "\(n)") else { continue }
             let spec = HotkeySpec(keyCode: kc, modifiers: mods)
             if let id = HotkeyManager.shared.register(spec, action: {
-                MoveActions.moveFocusedWindowToDisplay(index: n)
+                TilingActions.shared.moveFocusedToDisplay(n)
             }) {
                 displayHotkeyIDs.append(id)
             }
