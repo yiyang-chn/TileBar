@@ -67,6 +67,7 @@ TileBar prompts the first time you tile. Tick TileBar in **System Settings → P
 | **⌘⌥←** | …to the left |
 | **⌘⌥↑** | …above |
 | **⌘⌥↓** | …below |
+| **⌘⌥H/J/K/L** | Same four directions, Vim-style — opt-in (off by default) |
 
 Single-display setups skip the "send to display" hotkey block (digits and arrows alike) so `⌘⌥1` `⌘⌥←` etc. stay available to your browser. Hotkeys re-register automatically when displays are plugged or unplugged.
 
@@ -102,7 +103,9 @@ Two ways:
 - Joined by `+`, case-insensitive.
 - Must include at least one of `cmd` / `opt` / `ctrl` (shift alone isn't strong enough).
 
-`moveToDisplayPrefix` format: modifier-only, at least one of `cmd` / `opt` / `ctrl`. The combined main key is fixed (digits 1-N for direct targeting, ←/→ for cyclic prev/next) — only the prefix is configurable.
+`moveToDisplayPrefix` format: modifier-only, at least one of `cmd` / `opt` / `ctrl`. The combined main key is fixed (digits 1-N for direct targeting, ←/→/↑/↓ for spatial directions) — only the prefix is configurable.
+
+`enableVimKeys` (boolean, defaults to `false`): when true, also registers `prefix + h/j/k/l` as Vim-style aliases for the same four directions (h=left, j=down, k=up, l=right). Toggle it via the checkbox in the **Set move-window modifier…** recorder window — closing the window via X / ⌘W auto-saves the checkbox state.
 
 Malformed values don't crash; the log records `invalid ..., using default` and the app falls back to the default.
 

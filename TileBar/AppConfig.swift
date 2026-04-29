@@ -10,10 +10,15 @@ struct AppConfig: Codable {
     /// Optional in JSON for forward compatibility — old configs that
     /// predate this field still load fine and pick up the default.
     var moveToDisplayPrefix: String?
+    /// When true, also register `prefix + h/j/k/l` as Vim-style directional
+    /// moves (h=left, j=down, k=up, l=right) alongside `prefix + ←/→/↑/↓`.
+    /// Off by default — opt-in via the recorder window's checkbox.
+    var enableVimKeys: Bool?
 
     static let `default` = AppConfig(
         hotkey: HotkeySpec.default.configString(),
-        moveToDisplayPrefix: "cmd+opt"
+        moveToDisplayPrefix: "cmd+opt",
+        enableVimKeys: false
     )
 }
 
@@ -69,5 +74,11 @@ enum AppConfigStore {
         if let mods = HotkeySpec.parseModifiersOnly(str) { return mods }
         Logger.log("invalid moveToDisplayPrefix '\(str)', using cmd+opt")
         return [.command, .option]
+    }
+
+    /// Whether HJKL (Vim-style) direction hotkeys should be registered
+    /// alongside the arrow keys. Defaults to false.
+    static func resolveVimKeys(_ config: AppConfig) -> Bool {
+        config.enableVimKeys ?? false
     }
 }

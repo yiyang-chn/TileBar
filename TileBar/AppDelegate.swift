@@ -12,7 +12,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         menuBar = MenuBarController()
         menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewTileHotkey(spec) }
-        menuBar.onDisplayPrefixChanged = { [weak self] mods in self?.applyNewDisplayPrefix(mods) }
+        menuBar.onDisplayPrefixChanged = { [weak self] mods, vim in
+            self?.applyNewDisplayPrefix(mods, vim: vim)
+        }
         menuBar.onMoveToDisplay = { idx in TilingActions.shared.moveFocusedToDisplay(idx) }
         menuBar.onMoveInDirection = { dir in TilingActions.shared.moveFocusedInDirection(dir) }
         menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
@@ -77,12 +79,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Spatial directional moves: prefix + ←/→/↑/↓ → send focused
         // window to the neighbouring display in that physical direction.
         // No-op when no display sits in that direction.
-        let directions: [(name: String, dir: SpatialDirection)] = [
+        var directions: [(name: String, dir: SpatialDirection)] = [
             ("left",  .left),
             ("right", .right),
             ("up",    .up),
             ("down",  .down),
         ]
+        // Optional Vim-style HJKL aliases for the same four directions.
+        // Off by default; enabled via the recorder's checkbox.
+        if AppConfigStore.resolveVimKeys(currentConfig) {
+            directions.append(contentsOf: [
+                ("h", .left),
+                ("j", .down),
+                ("k", .up),
+                ("l", .right),
+            ])
+        }
         for (name, dir) in directions {
             guard let kc = KeyMap.keyCode(for: name) else { continue }
             let spec = HotkeySpec(keyCode: kc, modifiers: mods)
@@ -106,8 +118,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         registerTileHotkey()
     }
 
-    private func applyNewDisplayPrefix(_ mods: NSEvent.ModifierFlags) {
+    private func applyNewDisplayPrefix(_ mods: NSEvent.ModifierFlags, vim: Bool) {
         currentConfig.moveToDisplayPrefix = HotkeySpec.formatModifiers(mods)
+        currentConfig.enableVimKeys = vim
         AppConfigStore.save(currentConfig)
         registerDisplayHotkeys()
     }

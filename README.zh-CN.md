@@ -67,6 +67,7 @@ open ~/Applications/TileBar.app
 | **⌘⌥←** | 左侧 |
 | **⌘⌥↑** | 上方 |
 | **⌘⌥↓** | 下方 |
+| **⌘⌥H/J/K/L** | 同样的四方向，Vim 风格——默认关闭，需要在录制器里勾选启用 |
 
 单显示器时不注册"送往显示器"那组快捷键（含数字和方向键），把 `⌘⌥1` `⌘⌥←` 这类键还给浏览器或其他 app。插拔显示器后自动重注册。
 
@@ -102,7 +103,9 @@ open ~/Applications/TileBar.app
 - 用 `+` 连接，大小写不敏感。
 - 至少要有一个 `cmd` / `opt` / `ctrl`（仅 shift 不够强）。
 
-`moveToDisplayPrefix` 格式：仅修饰键，至少一个 `cmd` / `opt` / `ctrl`。组合的主键固定（数字 1-N 直达、← → 上下循环），不可改。
+`moveToDisplayPrefix` 格式：仅修饰键，至少一个 `cmd` / `opt` / `ctrl`。组合的主键固定（数字 1-N 直达、←/→/↑/↓ 按物理方向），不可改。
+
+`enableVimKeys`（布尔，默认 `false`）：true 时额外注册 `prefix + h/j/k/l` 作为 Vim 风格方向键别名（h=左、j=下、k=上、l=右）。在 **设置移动窗口修饰键…** 录制窗口里有勾选框可开关——关窗（X / ⌘W）会自动保存当前勾选状态，只有点"取消"才丢弃。
 
 写错了不会崩，日志一行 `invalid ...，using default`，仍按默认值工作。
 

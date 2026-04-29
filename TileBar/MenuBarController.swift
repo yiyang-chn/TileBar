@@ -9,8 +9,10 @@ final class MenuBarController: NSObject {
     /// re-registers.
     var onHotkeyChanged: ((HotkeySpec) -> Void)?
 
-    /// Move-to-display modifier prefix was changed via the recorder.
-    var onDisplayPrefixChanged: ((NSEvent.ModifierFlags) -> Void)?
+    /// Move-to-display modifier prefix and Vim-keys checkbox were saved in
+    /// the recorder. AppDelegate persists both and re-registers the hotkey
+    /// set accordingly.
+    var onDisplayPrefixChanged: ((NSEvent.ModifierFlags, Bool) -> Void)?
 
     /// User picked "把焦点窗口送到显示器 N" from the menu (1-indexed).
     var onMoveToDisplay: ((Int) -> Void)?
@@ -158,9 +160,12 @@ final class MenuBarController: NSObject {
         if recorder == nil { recorder = HotkeyRecorderWindow() }
         guard let w = recorder else { return }
         w.onSave = nil
-        w.onSaveModifiers = { [weak self] mods in self?.onDisplayPrefixChanged?(mods) }
+        w.onSaveModifiers = { [weak self] mods, vim in
+            self?.onDisplayPrefixChanged?(mods, vim)
+        }
         let cfg = AppConfigStore.load()
-        w.showModifierOnly(currentMods: AppConfigStore.resolveDisplayPrefix(cfg))
+        w.showModifierOnly(currentMods: AppConfigStore.resolveDisplayPrefix(cfg),
+                           currentVim: AppConfigStore.resolveVimKeys(cfg))
     }
 
     @objc private func reloadConfig() {
