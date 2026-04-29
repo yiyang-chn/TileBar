@@ -112,16 +112,16 @@ final class HotkeyRecorderWindow: NSWindow {
 
     /// Show as modifier-only recorder. The user presses any combo; we keep
     /// only the modifier part and discard the main key. Display previews
-    /// the prefix with the digit slot, e.g. ⌘⌥+1/2/3…
+    /// the prefix with the digit/arrow slot, e.g. ⌘⌥+1/2/←/→.
     func showModifierOnly(currentMods: NSEvent.ModifierFlags) {
         mode = .modifierOnly
         title = "设置移动窗口修饰键"
         promptLabel.stringValue = "按下含修饰键的组合（主键会被忽略）"
-        hintLabel.stringValue = "保存后，会和数字键 1/2/3… 组合成"
-            + "「焦点窗口送到显示器 N」的快捷键"
+        hintLabel.stringValue = "保存后会与数字键 1/2/… 组合成「送到显示器 N」，"
+            + "并与方向键 ←/→ 组合成「送到上一个/下一个显示器」"
         capturedSpec = nil
         capturedMods = currentMods
-        captureLabel.stringValue = HotkeySpec.displayModifiers(currentMods) + "+1/2/3…"
+        captureLabel.stringValue = HotkeySpec.displayModifiers(currentMods) + "+1/2/…/←/→"
         captureLabel.textColor = .secondaryLabelColor
         saveButton.isEnabled = false
         center()
@@ -176,7 +176,7 @@ final class HotkeyRecorderWindow: NSWindow {
 
         case .modifierOnly:
             capturedMods = usefulMods
-            captureLabel.stringValue = HotkeySpec.displayModifiers(usefulMods) + "+1/2/3…"
+            captureLabel.stringValue = HotkeySpec.displayModifiers(usefulMods) + "+1/2/…/←/→"
         }
 
         captureLabel.textColor = .labelColor

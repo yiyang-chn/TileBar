@@ -14,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewTileHotkey(spec) }
         menuBar.onDisplayPrefixChanged = { [weak self] mods in self?.applyNewDisplayPrefix(mods) }
         menuBar.onMoveToDisplay = { idx in TilingActions.shared.moveFocusedToDisplay(idx) }
+        menuBar.onMoveByDelta = { delta in TilingActions.shared.moveFocusedByDelta(delta) }
         menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
         currentConfig = AppConfigStore.load()
         registerAllHotkeys()
@@ -53,6 +54,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Single display = no point grabbing the user's ⌘⌥1 globally.
         guard screens.count >= 2 else { return }
         let mods = AppConfigStore.resolveDisplayPrefix(currentConfig)
+
+        // Numbered targets: prefix + 1..N → "send to display N".
         for (i, _) in screens.enumerated() {
             let n = i + 1
             guard n <= 9 else { break }
@@ -60,6 +63,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let spec = HotkeySpec(keyCode: kc, modifiers: mods)
             if let id = HotkeyManager.shared.register(spec, action: {
                 TilingActions.shared.moveFocusedToDisplay(n)
+            }) {
+                displayHotkeyIDs.append(id)
+            }
+        }
+
+        // Directional cycling: prefix + ←/→ for prev/next display, with wrap.
+        let directions: [(name: String, delta: Int)] = [("left", -1), ("right", +1)]
+        for (name, delta) in directions {
+            guard let kc = KeyMap.keyCode(for: name) else { continue }
+            let spec = HotkeySpec(keyCode: kc, modifiers: mods)
+            if let id = HotkeyManager.shared.register(spec, action: {
+                TilingActions.shared.moveFocusedByDelta(delta)
             }) {
                 displayHotkeyIDs.append(id)
             }

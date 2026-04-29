@@ -44,6 +44,14 @@ final class TilingActions {
         self.post = result.post
     }
 
+    /// Send the focused window to the next/previous display (cyclic) AND
+    /// re-tile. `delta` is +1 for next, -1 for prev (or any integer for
+    /// multi-step wrap). Same atomicity guarantees as moveFocusedToDisplay.
+    func moveFocusedByDelta(_ delta: Int) {
+        guard let target = MoveActions.computeTargetDisplay(delta: delta) else { return }
+        moveFocusedToDisplay(target)
+    }
+
     /// Send the focused window to display N (1-indexed) AND re-tile every
     /// affected display. The toggle state is updated atomically:
     ///   - `pre`  = the user's arrangement BEFORE the move (so the next ⌘⌥T

@@ -3,6 +3,33 @@ import ApplicationServices
 
 /// One-shot window manipulations that don't go through the tiling pipeline.
 enum MoveActions {
+    /// Compute the 1-indexed target display for the focused window after
+    /// shifting `delta` displays (with cyclic wrap-around). Returns nil if
+    /// the move can't be resolved (single display, no AX trust, no focused
+    /// window, focused window not on any screen).
+    static func computeTargetDisplay(delta: Int) -> Int? {
+        let screens = NSScreen.screens
+        guard screens.count >= 2 else { return nil }
+        guard AXIsProcessTrusted() else { return nil }
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let pid = app.processIdentifier
+        let axApp = AXUIElementCreateApplication(pid)
+        var winRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp,
+                                            kAXFocusedWindowAttribute as CFString,
+                                            &winRef) == .success,
+              let focused = winRef
+        else { return nil }
+        let win = focused as! AXUIElement
+        guard let currentRect = AXWindowMover.readRect(win),
+              let srcScreen = ScreenGeometry.screenContaining(currentRect),
+              let srcIdx = screens.firstIndex(of: srcScreen) else { return nil }
+        let n = screens.count
+        // Modulo for negative: ((a % n) + n) % n
+        let dstIdx = ((srcIdx + delta) % n + n) % n
+        return dstIdx + 1
+    }
+
     /// Move the focused window of the frontmost app to display N (1-indexed
     /// against `NSScreen.screens`). Preserves the window's relative position
     /// and size proportions within visibleFrame, so a window that filled

@@ -31,9 +31,9 @@ struct HotkeySpec: Equatable {
         return parts.joined(separator: "+")
     }
 
-    /// Pretty display string with macOS modifier glyphs, e.g. "⌘⌥T".
+    /// Pretty display string with macOS modifier glyphs, e.g. "⌘⌥T" or "⌘⌥←".
     func displayString() -> String {
-        HotkeySpec.displayModifiers(modifiers) + (KeyMap.name(for: keyCode) ?? "?").uppercased()
+        HotkeySpec.displayModifiers(modifiers) + (KeyMap.glyph(for: keyCode) ?? "?")
     }
 
     /// Parse "cmd+opt+t" / "Ctrl+Shift+F1" / etc. Returns nil on any parse
@@ -130,6 +130,10 @@ enum KeyMap {
         ("tab", UInt32(kVK_Tab)),
         ("escape", UInt32(kVK_Escape)), ("esc", UInt32(kVK_Escape)),
         ("delete", UInt32(kVK_Delete)),
+        ("left", UInt32(kVK_LeftArrow)),
+        ("right", UInt32(kVK_RightArrow)),
+        ("up", UInt32(kVK_UpArrow)),
+        ("down", UInt32(kVK_DownArrow)),
         ("f1", UInt32(kVK_F1)), ("f2", UInt32(kVK_F2)), ("f3", UInt32(kVK_F3)),
         ("f4", UInt32(kVK_F4)), ("f5", UInt32(kVK_F5)), ("f6", UInt32(kVK_F6)),
         ("f7", UInt32(kVK_F7)), ("f8", UInt32(kVK_F8)), ("f9", UInt32(kVK_F9)),
@@ -148,6 +152,23 @@ enum KeyMap {
 
     static func name(for keyCode: UInt32) -> String? {
         table.first { $0.code == keyCode }?.name
+    }
+
+    /// Pretty glyph for display strings — arrows render as ←→↑↓ instead of
+    /// "LEFT" etc. Falls back to the upper-cased config name.
+    static func glyph(for keyCode: UInt32) -> String? {
+        switch keyCode {
+        case UInt32(kVK_LeftArrow):  return "←"
+        case UInt32(kVK_RightArrow): return "→"
+        case UInt32(kVK_UpArrow):    return "↑"
+        case UInt32(kVK_DownArrow):  return "↓"
+        case UInt32(kVK_Space):      return "Space"
+        case UInt32(kVK_Return):     return "↵"
+        case UInt32(kVK_Tab):        return "⇥"
+        case UInt32(kVK_Escape):     return "⎋"
+        case UInt32(kVK_Delete):     return "⌫"
+        default: return name(for: keyCode)?.uppercased()
+        }
     }
 }
 

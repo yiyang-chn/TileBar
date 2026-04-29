@@ -15,6 +15,9 @@ final class MenuBarController: NSObject {
     /// User picked "把焦点窗口送到显示器 N" from the menu (1-indexed).
     var onMoveToDisplay: ((Int) -> Void)?
 
+    /// User picked "上一个 / 下一个显示器" — delta is -1 / +1 with cyclic wrap.
+    var onMoveByDelta: ((Int) -> Void)?
+
     /// User picked "重新加载配置".
     var onReloadConfig: (() -> Void)?
 
@@ -62,6 +65,18 @@ final class MenuBarController: NSObject {
                 item.tag = n
                 menu.addItem(item)
             }
+            let prev = NSMenuItem(title: "把焦点窗口送到上一个显示器",
+                                  action: #selector(moveByDelta(_:)),
+                                  keyEquivalent: "")
+            prev.target = self
+            prev.tag = -1
+            menu.addItem(prev)
+            let next = NSMenuItem(title: "把焦点窗口送到下一个显示器",
+                                  action: #selector(moveByDelta(_:)),
+                                  keyEquivalent: "")
+            next.target = self
+            next.tag = +1
+            menu.addItem(next)
         }
 
         menu.addItem(.separator())
@@ -112,6 +127,10 @@ final class MenuBarController: NSObject {
 
     @objc private func moveToDisplayN(_ sender: NSMenuItem) {
         onMoveToDisplay?(sender.tag)
+    }
+
+    @objc private func moveByDelta(_ sender: NSMenuItem) {
+        onMoveByDelta?(sender.tag)
     }
 
     @objc private func openTileRecorder() {
