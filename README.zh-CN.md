@@ -1,0 +1,120 @@
+# TileBar
+
+[English](README.md)
+
+macOS 菜单栏小工具。一次平铺当前 Space 上所有显示器的可见普通窗口（Squarified Treemap，按 app 类别加权），支持智能 toggle 撤销、可配置全局快捷键、以及把焦点窗口送到指定显示器。
+
+## 构建
+
+```bash
+cd TileBar
+xcodebuild -project TileBar.xcodeproj -scheme TileBar -configuration Release \
+  -derivedDataPath build \
+  CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
+```
+
+## 安装
+
+```bash
+cp -R build/Build/Products/Release/TileBar.app ~/Applications/
+```
+
+## 首次启动（macOS 15 Sequoia 及以上）
+
+```bash
+open ~/Applications/TileBar.app
+```
+
+如果系统提示"无法验证开发者"：
+
+1. 点 Done。
+2. 进入 **系统设置 → 隐私与安全性**，滚到 Security 段落。
+3. 找到 TileBar 一行，点击 **仍要打开**，输入管理员密码确认。
+
+之后正常 `open` 即可启动。
+
+## Accessibility 授权
+
+首次平铺前会弹引导。在 **系统设置 → 隐私与安全性 → 辅助功能** 勾选 TileBar。授权后 1.5 秒内自动检测到，无需重启。
+
+> **重要**：每次重新构建（ad-hoc 签名 cdhash 变了），TCC 都会失效。要么用 `tccutil reset Accessibility local.tilebar` + 重新勾选，要么用稳定的自签名证书（钥匙串助理 → 证书助理 → 创建证书，类型选"代码签名"，再 build 时加 `CODE_SIGN_IDENTITY="<证书名>"`）。
+
+## 使用
+
+### 菜单栏图标
+
+- **左键单击**：智能 toggle。
+  - 当前布局 ≈ 上次平铺结果（你没动过窗口）→ 撤销到平铺前的状态。
+  - 当前布局 ≠ 上次结果（拖动过、新开/关了窗口）→ 重新平铺。
+- **右键单击 / Control 单击**：弹出菜单：
+  - **立即平铺**：忽略 toggle 状态，直接做一次新的平铺。
+  - **把焦点窗口送到显示器 N**：仅在多屏时显示，每个显示器一项。
+  - **把焦点窗口送到上一个 / 下一个显示器**：循环。
+  - **设置平铺快捷键…**：录制 toggle 快捷键。
+  - **设置移动窗口修饰键…**：录制"送往显示器"的修饰键前缀（与数字键 / 方向键自动组合）。
+  - **重新加载配置**：重新读取 `~/.tilebar.json`。
+  - **退出 TileBar**。
+
+### 全局快捷键
+
+| 默认快捷键 | 行为 |
+|---|---|
+| **⌘⌥T** | 平铺 ↔ 撤销（toggle） |
+| **⌘⌥1** | 把焦点窗口送到显示器 1（移动 + 自动重平铺） |
+| **⌘⌥2** | 显示器 2 |
+| **⌘⌥N** | 显示器 N（最多 9，按当前实际显示器数量动态注册） |
+| **⌘⌥→** | 焦点窗口送到下一个显示器（循环） |
+| **⌘⌥←** | 焦点窗口送到上一个显示器（循环） |
+
+单显示器时不注册"送往显示器"那组快捷键（含数字和方向键），把 `⌘⌥1` `⌘⌥←` 这类键还给浏览器或其他 app。插拔显示器后自动重注册。
+
+**移动到显示器的语义**：是"移动 + 自动重平铺"的原子操作。窗口送到目标屏后，源屏和目标屏都立即重新 squarify。智能 toggle 的 `pre` 快照保留**移动前**的整体布局，所以移动后立刻按 ⌘⌥T 可以一键还原整套操作。
+
+### 多显示器
+
+每个显示器独立 squarify，互不干扰。窗口归属按"最大面积覆盖"判定（横跨两屏的窗口归到面积更大的那一屏）。
+
+跨屏移动的几何：等比缩放到目标显示器的 visibleFrame 内——保持窗口在源屏的相对位置和尺寸比例。
+
+### 改快捷键
+
+两种方式：
+
+- **GUI**：右键菜单 → 设置平铺快捷键 / 设置移动窗口修饰键 → 按下新组合 → 保存。
+- **手改文件**：编辑 `~/.tilebar.json`，然后右键菜单 → 重新加载配置（或重启 app）。
+
+```json
+{
+  "hotkey": "cmd+opt+t",
+  "moveToDisplayPrefix": "cmd+opt"
+}
+```
+
+`hotkey` 格式：
+- 修饰键：`cmd` / `opt`（或 `alt`）/ `ctrl`（或 `control`）/ `shift`
+- 主键：单字母 `t`、数字 `1`、方向键 `left` `right` `up` `down`、具名键 `space` `return` `tab` `escape` `delete` `f1`…`f12`、常见标点 `,` `.` `;` `'` `[` `]` `/` `\` `-` `=` <code>`</code>
+- 用 `+` 连接，大小写不敏感。
+- 至少要有一个 `cmd` / `opt` / `ctrl`（仅 shift 不够强）。
+
+`moveToDisplayPrefix` 格式：仅修饰键，至少一个 `cmd` / `opt` / `ctrl`。组合的主键固定（数字 1-N 直达、← → 上下循环），不可改。
+
+写错了不会崩，日志一行 `invalid ...，using default`，仍按默认值工作。
+
+## 调内容权重
+
+每个 app 的初始权重在 [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift) 的 `coefficients` 表里，按 bundle id 前缀匹配。改完重建即生效。
+
+数字含义：相对权重。Chrome 2.2、Terminal 0.6 意味着 Chrome 大约会拿 Terminal 的 ~3.7 倍面积。未识别的 app 默认 1.0。
+
+## 风险提示
+
+- 只在当前 Space 操作；全屏 Space、其他 Space 上的窗口会被静默跳过。
+- 对每个被操作的 app，TileBar 临时把私有属性 `AXEnhancedUserInterface` 设为 `false` 再操作完恢复。这是 Electron 应用（Slack、Discord、Claude desktop、VS Code）能被 AX 强制 resize 的唯一可靠方法，Yabai/Rectangle/Magnet 等所有 macOS 窗口管理器都用同样的 hack。如果某个 app 在平铺过程中表现出闪屏或动画异常，绝大多数情况是这个开关瞬时切换造成的，操作结束后会恢复到 app 原本的设置。
+- 极少数应用（如腾讯 QQ）即使加了 EUI workaround 也完全无视 AX setSize。TileBar 仍然能 setPosition + 把溢出的部分 clamp 回屏内，保证它整窗可见；但这种 app 在小屏上和别的窗口同处一屏时**会重叠**——这是几何不可避免，TileBar 没办法解决。
+
+## 排查
+
+```bash
+log show --predicate 'subsystem == "local.tilebar"' --last 5m
+log stream --predicate 'subsystem == "local.tilebar"'
+```

@@ -1,8 +1,10 @@
 # TileBar
 
-macOS 菜单栏小工具。一次平铺当前 Space + 主显示器上所有可见普通窗口（Squarified Treemap，按 app 类别加权），并支持智能 toggle 撤销与可配置全局快捷键。
+[中文](README.zh-CN.md)
 
-## 构建
+A tiny macOS menu bar utility that tiles every visible app window across your displays in one click. Layout is a Squarified Treemap weighted by app category; smart toggle to undo, configurable global hotkeys, and per-display window moves.
+
+## Build
 
 ```bash
 cd TileBar
@@ -11,74 +13,75 @@ xcodebuild -project TileBar.xcodeproj -scheme TileBar -configuration Release \
   CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
 ```
 
-## 安装
+## Install
 
 ```bash
 cp -R build/Build/Products/Release/TileBar.app ~/Applications/
 ```
 
-## 首次启动（macOS 15 Sequoia 及以上）
+## First launch (macOS 15 Sequoia and later)
 
 ```bash
 open ~/Applications/TileBar.app
 ```
 
-如果系统提示"无法验证开发者"：
+If macOS shows "developer cannot be verified":
 
-1. 点 Done。
-2. 进入 **系统设置 → 隐私与安全性**，滚到 Security 段落。
-3. 找到 TileBar 一行，点击 **仍要打开**，输入管理员密码确认。
+1. Click Done.
+2. Open **System Settings → Privacy & Security**, scroll to the Security section.
+3. Find the TileBar row and click **Open Anyway**, confirm with your admin password.
 
-之后正常 `open` 即可启动。
+After that `open` works normally.
 
-## Accessibility 授权
+## Accessibility permission
 
-首次平铺前会弹引导。在 **系统设置 → 隐私与安全性 → 辅助功能** 勾选 TileBar。授权后 1.5 秒内自动检测到，无需重启。
+TileBar prompts the first time you tile. Tick TileBar in **System Settings → Privacy & Security → Accessibility**. The app polls every 1.5 s and picks up the grant automatically — no restart needed.
 
-> **重要**：每次重新构建（ad-hoc 签名 cdhash 变了），TCC 都会失效。要么用 `tccutil reset Accessibility local.tilebar` + 重新勾选，要么用稳定的自签名证书（钥匙串助理生成本地代码签名证书后，build 时加 `CODE_SIGN_IDENTITY="<证书名>"`）。
+> **Heads up**: every rebuild produces a new ad-hoc cdhash, which invalidates the TCC entry. Either run `tccutil reset Accessibility local.tilebar` and re-tick, or use a stable self-signed certificate (Keychain Access → Certificate Assistant → Create a Certificate, type "Code Signing", then build with `CODE_SIGN_IDENTITY="<cert name>"`).
 
-## 使用
+## Usage
 
-### 菜单栏图标
+### Menu bar icon
 
-- **左键单击**：智能 toggle。
-  - 当前布局 ≈ 上次平铺结果（你没动过窗口）→ 撤销到平铺前的状态。
-  - 当前布局 ≠ 上次结果（拖动过、新开/关了窗口）→ 重新平铺。
-- **右键单击 / Control 单击**：弹出菜单：
-  - **立即平铺**：忽略 toggle 状态，直接做一次新的平铺。
-  - **把焦点窗口送到显示器 N**：仅在多屏时显示，每个显示器一项。
-  - **设置平铺快捷键…**：录制 toggle 快捷键。
-  - **设置移动窗口修饰键…**：录制"送往显示器"的修饰键前缀（与数字键 1/2/3… 自动组合）。
-  - **重新加载配置**：重新读取 `~/.tilebar.json`。
-  - **退出 TileBar**。
+- **Left click**: smart toggle.
+  - Layout ≈ last tile result (you haven't touched anything) → undo to the pre-tile state.
+  - Layout ≠ last result (window dragged, opened, or closed) → tile fresh.
+- **Right click / Control click**: drop-down menu:
+  - **Tile now**: forces a fresh tile, ignoring toggle state.
+  - **Send focused window to display N**: appears only with multiple displays, one entry per display.
+  - **Send focused window to previous/next display**: cyclic.
+  - **Set tile hotkey…**: record a new combo for the toggle.
+  - **Set move-window modifier…**: record the modifier prefix that combines with digits / arrows.
+  - **Reload config**: re-reads `~/.tilebar.json`.
+  - **Quit TileBar**.
 
-### 全局快捷键
+### Global hotkeys
 
-| 默认快捷键 | 行为 |
+| Default | Action |
 |---|---|
-| **⌘⌥T** | 平铺 ↔ 撤销（toggle） |
-| **⌘⌥1** | 把焦点窗口送到显示器 1（移动 + 自动重平铺） |
-| **⌘⌥2** | 显示器 2 |
-| **⌘⌥N** | 显示器 N（最多 9，按当前实际显示器数量动态注册） |
-| **⌘⌥→** | 焦点窗口送到下一个显示器（循环） |
-| **⌘⌥←** | 焦点窗口送到上一个显示器（循环） |
+| **⌘⌥T** | Tile ↔ undo (toggle) |
+| **⌘⌥1** | Send focused window to display 1 (move + auto-retile) |
+| **⌘⌥2** | Display 2 |
+| **⌘⌥N** | Display N (up to 9, dynamically registered to match the actual display count) |
+| **⌘⌥→** | Send focused window to the next display (cyclic) |
+| **⌘⌥←** | Previous display (cyclic) |
 
-单显示器时不注册"送往显示器"那组快捷键（含数字和方向键），把 `⌘⌥1` `⌘⌥←` 这类键还给浏览器或其他 app。插拔显示器后自动重注册。
+Single-display setups skip the "send to display" hotkey block (digits and arrows alike) so `⌘⌥1` `⌘⌥←` etc. stay available to your browser. Hotkeys re-register automatically when displays are plugged or unplugged.
 
-**移动到显示器的语义**：是"移动 + 自动重平铺"的原子操作。窗口送到目标屏后，源屏和目标屏都立即重新 squarify。智能 toggle 的 `pre` 快照保留**移动前**的整体布局，所以移动后立刻按 ⌘⌥T 可以一键还原整套操作。
+**Move-to-display semantics**: it's an atomic *move + auto-retile*. Once the window lands on the destination display, both source and destination get re-squarified. The smart toggle's `pre` snapshot points at the layout *before* the move, so a follow-up ⌘⌥T undoes the entire compound operation in one shot.
 
-### 多显示器
+### Multi-display
 
-每个显示器独立 squarify，互不干扰。窗口归属按"最大面积覆盖"判定（横跨两屏的窗口归到面积更大的那一屏）。
+Each display is squarified independently. A window is assigned to the display covering the largest portion of it (a window straddling two screens goes to the one with more area).
 
-跨屏移动的几何：等比缩放到目标显示器的 visibleFrame 内——保持窗口在源屏的相对位置和尺寸比例。
+Cross-display moves use equiproportional remapping into the target's visibleFrame: the window keeps its relative position and size proportions from the source display.
 
-### 改快捷键
+### Changing hotkeys
 
-两种方式：
+Two ways:
 
-- **GUI**：右键菜单 → 设置平铺快捷键 / 设置移动窗口修饰键 → 按下新组合 → 保存。
-- **手改文件**：编辑 `~/.tilebar.json`，然后右键菜单 → 重新加载配置（或重启 app）。
+- **GUI**: right-click menu → Set tile hotkey / Set move-window modifier → press the new combo → Save.
+- **Edit the file**: edit `~/.tilebar.json`, then right-click menu → Reload config (or restart the app).
 
 ```json
 {
@@ -87,28 +90,29 @@ open ~/Applications/TileBar.app
 }
 ```
 
-`hotkey` 格式：
-- 修饰键：`cmd` / `opt`（或 `alt`）/ `ctrl`（或 `control`）/ `shift`
-- 主键：单字母 `t`、数字 `1`、方向键 `left` `right` `up` `down`、具名键 `space` `return` `tab` `escape` `delete` `f1`…`f12`、常见标点 `,` `.` `;` `'` `[` `]` `/` `\` `-` `=` <code>`</code>
-- 用 `+` 连接，大小写不敏感。
-- 至少要有一个 `cmd` / `opt` / `ctrl`（仅 shift 不够强）。
+`hotkey` format:
+- Modifiers: `cmd` / `opt` (or `alt`) / `ctrl` (or `control`) / `shift`
+- Main key: single letter `t`, digit `1`, arrow `left` `right` `up` `down`, named key `space` `return` `tab` `escape` `delete` `f1`…`f12`, common punctuation `,` `.` `;` `'` `[` `]` `/` `\` `-` `=` <code>`</code>
+- Joined by `+`, case-insensitive.
+- Must include at least one of `cmd` / `opt` / `ctrl` (shift alone isn't strong enough).
 
-`moveToDisplayPrefix` 格式：仅修饰键，至少一个 `cmd` / `opt` / `ctrl`。组合的主键固定（数字 1-N 直达、← → 上下循环），不可改。
+`moveToDisplayPrefix` format: modifier-only, at least one of `cmd` / `opt` / `ctrl`. The combined main key is fixed (digits 1-N for direct targeting, ←/→ for cyclic prev/next) — only the prefix is configurable.
 
-写错了不会崩，日志一行 `invalid ...，using default`，仍按默认值工作。
+Malformed values don't crash; the log records `invalid ..., using default` and the app falls back to the default.
 
-## 调内容权重
+## Tweaking content weights
 
-每个 app 的初始权重在 [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift) 的 `coefficients` 表里，按 bundle id 前缀匹配。改完重建即生效。
+The per-app weights live in the `coefficients` table at [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift), matched by bundle id prefix. Edit, rebuild, done.
 
-数字含义：相对权重。Chrome 2.2、Terminal 0.6 意味着 Chrome 大约会拿 Terminal 的 ~3.7 倍面积。未识别的 app 默认 1.0。
+What the numbers mean: relative area weight. Chrome 2.2 and Terminal 0.6 means Chrome will get roughly 3.7× the area of Terminal. Apps not in the table default to 1.0.
 
-## 风险提示
+## Caveats
 
-- 只在主显示器、当前 Space 操作；多显示器、跨 Space、全屏窗口会被静默跳过。
-- 对每个被操作的 app，TileBar 临时把私有属性 `AXEnhancedUserInterface` 设为 `false` 再操作完恢复。这是 Electron 应用（Slack、Discord、Claude desktop、VS Code）能被 AX 强制 resize 的唯一可靠方法，Yabai/Rectangle/Magnet 等所有 macOS 窗口管理器都用同样的 hack。如果某个 app 在平铺过程中表现出闪屏或动画异常，绝大多数情况是这个开关瞬时切换造成的，操作结束后会恢复到 app 原本的设置。
+- Operates on the current Space only. Full-screen Spaces and windows on other Spaces are skipped silently.
+- For every app it manipulates, TileBar temporarily flips the private `AXEnhancedUserInterface` attribute to `false` and restores it after. This is the only reliable way to make Electron apps (Slack, Discord, Claude desktop, VS Code) actually obey AX-driven resize — same trick used by Yabai, Rectangle, Magnet, and every other macOS window manager. If you ever notice a brief animation glitch in one of those apps during tiling, that's the toggle.
+- A handful of apps (notably Tencent QQ) ignore AX setSize entirely even with that workaround. TileBar still places them via setPosition and clamps any overflow back inside the display, so they stay fully visible — but two such apps on a small external display may end up overlapping. That's geometric; nothing TileBar can do.
 
-## 排查
+## Troubleshooting
 
 ```bash
 log show --predicate 'subsystem == "local.tilebar"' --last 5m
