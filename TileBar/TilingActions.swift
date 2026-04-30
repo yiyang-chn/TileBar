@@ -17,7 +17,25 @@ final class TilingActions {
 
     private var pre: WindowSnapshot?
     private var post: WindowSnapshot?
+    private var session: TileSession?
     private var inFlight = false
+
+    /// Replace the active TileSession with a fresh one wrapping `snap`.
+    /// Always call after a successful tile so edge-drag propagation
+    /// tracks the new layout.
+    private func replaceSession(with snap: WindowSnapshot) {
+        session?.stop()
+        let s = TileSession(snapshot: snap)
+        s.start()
+        session = s
+    }
+
+    /// Drop the active session — the layout is no longer valid (undone,
+    /// or about to be re-tiled).
+    private func clearSession() {
+        session?.stop()
+        session = nil
+    }
 
     /// Smart toggle: if the user hasn't moved any window since the last tile,
     /// undo. Otherwise tile fresh.
@@ -35,14 +53,17 @@ final class TilingActions {
         if let post = post,
            let pre = pre,
            TilingPipeline.currentMatches(post) {
+            clearSession()
             TilingPipeline.restore(pre)
             self.pre = nil
             self.post = nil
             return
         }
+        clearSession()
         guard let result = TilingPipeline.runTile() else { return }
         self.pre = result.pre
         self.post = result.post
+        replaceSession(with: result.post)
     }
 
     /// Force a fresh tile, regardless of toggle state. Used by the explicit
@@ -57,9 +78,11 @@ final class TilingActions {
                 self.inFlight = false
             }
         }
+        clearSession()
         guard let result = TilingPipeline.runTile() else { return }
         self.pre = result.pre
         self.post = result.post
+        replaceSession(with: result.post)
     }
 
     /// Send the focused window to the display physically positioned in
@@ -116,14 +139,17 @@ final class TilingActions {
     /// path used by both moveFocusedToDisplay and moveFocusedInDirection.
     /// `inFlight` is assumed already held by the caller.
     private func runMoveAndRetile(focused: FocusedWindow, dstIndex: Int) {
+        clearSession()
         let preSnap = TilingPipeline.snapshot()
         MoveActions.move(focused, toDisplay: dstIndex)
+        let postSnap: WindowSnapshot
         if let result = TilingPipeline.runTile() {
-            self.pre = preSnap
-            self.post = result.post
+            postSnap = result.post
         } else {
-            self.pre = preSnap
-            self.post = TilingPipeline.snapshot()
+            postSnap = TilingPipeline.snapshot()
         }
+        self.pre = preSnap
+        self.post = postSnap
+        replaceSession(with: postSnap)
     }
 }

@@ -93,6 +93,10 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 **Move-to-display semantics**: it's an atomic *move + auto-retile*. Once the window lands on the destination display, both source and destination get re-squarified. The smart toggle's `pre` snapshot points at the layout *before* the move, so a follow-up ⌘⌥T undoes the entire compound operation in one shot.
 
+### Edge-drag to resize
+
+After tile, dragging the edge of any window updates its tiled neighbours in real-time: drag Chrome's right edge → Claude/Slack on the right shrink to keep the layout gapless. Drag Claude's bottom edge → Slack's top follows. Live propagation runs via AX resize observers, so it tracks your drag as you go (modulo the usual stubborn-app caveats — Tencent QQ and friends still ignore AX setSize). The session ends on the next tile or undo.
+
 ### How the layout is decided
 
 Two independent signals:
