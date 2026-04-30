@@ -57,6 +57,16 @@ enum L10n {
     static var settingsSave: String               { s("保存", "Save") }
     static var settingsCancel: String             { s("取消", "Cancel") }
 
+    // MARK: - Toast (transient HUD-style notifications)
+
+    static var toastTileFailedTitle: String {
+        s("无法平铺", "Can't tile")
+    }
+    static var toastTileFailedBody: String {
+        s("窗口的最小尺寸塞不进当前显示器。已恢复平铺前的布局。",
+          "Windows' minimum sizes don't fit on this display. Layout restored.")
+    }
+
     // MARK: - HotkeyField placeholders
 
     static var fieldClickToRecord: String { s("点击此处录制", "Click to record") }

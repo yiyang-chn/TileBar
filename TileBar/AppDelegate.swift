@@ -21,6 +21,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         TilingActions.shared.onBusyChanged = { [weak self] busy in
             self?.menuBar.setBusy(busy)
         }
+        // Surface tile rollbacks (overlap detected) as a HUD-style toast.
+        TilingActions.shared.onTileFailed = {
+            Toast.show(title: L10n.toastTileFailedTitle,
+                       body: L10n.toastTileFailedBody)
+        }
         currentConfig = AppConfigStore.load()
         registerAllHotkeys()
         ensureAXTrust()

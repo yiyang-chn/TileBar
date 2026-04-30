@@ -384,6 +384,28 @@ enum TilingPipeline {
                 WindowSnapshot.Entry(ax: e.ax, cgWindowID: e.cgWindowID, rect: $0)
             }
         })
+
+        // Overlap check: in a proper tile, windows touch only at edges.
+        // If any pair shares more than ~70×70 of area, the layout failed
+        // — typically Electron min-sizes don't fit the display (common
+        // on 13" laptops with 3+ chat-class apps). Roll back so the
+        // user keeps their original arrangement instead of a stack.
+        let overlapThreshold: CGFloat = 5000
+        var maxOverlap: CGFloat = 0
+        for i in 0..<post.entries.count {
+            for j in (i + 1)..<post.entries.count {
+                let inter = post.entries[i].rect.intersection(post.entries[j].rect)
+                guard !inter.isNull else { continue }
+                let area = inter.width * inter.height
+                if area > maxOverlap { maxOverlap = area }
+            }
+        }
+        if maxOverlap > overlapThreshold {
+            Logger.log("tile produced \(Int(maxOverlap))px² overlap; rolling back to pre-tile")
+            restore(pre)
+            return nil
+        }
+
         return (pre, post)
     }
 

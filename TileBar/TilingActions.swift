@@ -15,6 +15,11 @@ final class TilingActions {
     /// was received even when the work blocks the main runloop.
     var onBusyChanged: ((Bool) -> Void)?
 
+    /// Fired when a tile attempt was rolled back due to overlap (windows
+    /// can't all fit on the display). Subscriber typically surfaces a
+    /// toast so the user knows why ⌘⌥T appeared to do nothing.
+    var onTileFailed: (() -> Void)?
+
     private var pre: WindowSnapshot?
     private var post: WindowSnapshot?
     private var session: TileSession?
@@ -60,7 +65,14 @@ final class TilingActions {
             return
         }
         clearSession()
-        guard let result = TilingPipeline.runTile() else { return }
+        guard let result = TilingPipeline.runTile() else {
+            // Tile rolled back (overlap detected). Clear stale toggle
+            // state so the next ⌘⌥T tries fresh, and surface the failure.
+            self.pre = nil
+            self.post = nil
+            onTileFailed?()
+            return
+        }
         self.pre = result.pre
         self.post = result.post
         replaceSession(with: result.post)
@@ -79,7 +91,12 @@ final class TilingActions {
             }
         }
         clearSession()
-        guard let result = TilingPipeline.runTile() else { return }
+        guard let result = TilingPipeline.runTile() else {
+            self.pre = nil
+            self.post = nil
+            onTileFailed?()
+            return
+        }
         self.pre = result.pre
         self.post = result.post
         replaceSession(with: result.post)

@@ -24,6 +24,7 @@
 		B00000000000000000000F11 /* MoveActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F11 /* MoveActions.swift */; };
 		B00000000000000000000F12 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F12 /* L10n.swift */; };
 		B00000000000000000000F13 /* TileSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F13 /* TileSession.swift */; };
+		B00000000000000000000F14 /* Toast.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F14 /* Toast.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 		A00000000000000000000F11 /* MoveActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveActions.swift; sourceTree = "<group>"; };
 		A00000000000000000000F12 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 		A00000000000000000000F13 /* TileSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TileSession.swift; sourceTree = "<group>"; };
+		A00000000000000000000F14 /* Toast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Toast.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +87,7 @@
 				A00000000000000000000F0F /* SettingsWindow.swift */,
 				A00000000000000000000F12 /* L10n.swift */,
 				A00000000000000000000F13 /* TileSession.swift */,
+				A00000000000000000000F14 /* Toast.swift */,
 				A00000000000000000000F07 /* Logger.swift */,
 				A00000000000000000000F09 /* Assets.xcassets */,
 				A00000000000000000000F08 /* Info.plist */,
@@ -184,6 +187,7 @@
 				B00000000000000000000F0F /* SettingsWindow.swift in Sources */,
 				B00000000000000000000F12 /* L10n.swift in Sources */,
 				B00000000000000000000F13 /* TileSession.swift in Sources */,
+				B00000000000000000000F14 /* Toast.swift in Sources */,
 				B00000000000000000000F07 /* Logger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
