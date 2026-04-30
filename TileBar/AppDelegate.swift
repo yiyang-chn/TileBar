@@ -11,13 +11,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)
         menuBar = MenuBarController()
-        menuBar.onHotkeyChanged = { [weak self] spec in self?.applyNewTileHotkey(spec) }
-        menuBar.onDisplayPrefixChanged = { [weak self] mods, vim in
-            self?.applyNewDisplayPrefix(mods, vim: vim)
+        menuBar.onSettingsSaved = { [weak self] spec, mods, vim in
+            self?.applySettings(spec: spec, mods: mods, vim: vim)
         }
         menuBar.onMoveToDisplay = { idx in TilingActions.shared.moveFocusedToDisplay(idx) }
         menuBar.onMoveInDirection = { dir in TilingActions.shared.moveFocusedInDirection(dir) }
-        menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
         // Visual feedback while a tile/move is in progress. Bridged here
         // so TilingActions stays UI-agnostic.
         TilingActions.shared.onBusyChanged = { [weak self] busy in
@@ -91,7 +89,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ("down",  .down),
         ]
         // Optional Vim-style HJKL aliases for the same four directions.
-        // Off by default; enabled via the recorder's checkbox.
+        // Off by default; enabled via the settings window's checkbox.
         if AppConfigStore.resolveVimKeys(currentConfig) {
             directions.append(contentsOf: [
                 ("h", .left),
@@ -111,23 +109,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func reloadConfig() {
-        currentConfig = AppConfigStore.load()
-        registerAllHotkeys()
-        Logger.log("config reloaded")
-    }
+    /// Apply the bundle of settings produced by the unified Settings
+    /// window: persist, then re-register the affected hotkey groups.
+    /// Only re-registers what actually changed to avoid taking down a
+    /// global hotkey grab unnecessarily.
+    private func applySettings(spec: HotkeySpec,
+                               mods: NSEvent.ModifierFlags,
+                               vim: Bool) {
+        let prevHotkey = currentConfig.hotkey
+        let prevPrefix = currentConfig.moveToDisplayPrefix
+        let prevVim = currentConfig.enableVimKeys ?? false
 
-    private func applyNewTileHotkey(_ spec: HotkeySpec) {
         currentConfig.hotkey = spec.configString()
-        AppConfigStore.save(currentConfig)
-        registerTileHotkey()
-    }
-
-    private func applyNewDisplayPrefix(_ mods: NSEvent.ModifierFlags, vim: Bool) {
         currentConfig.moveToDisplayPrefix = HotkeySpec.formatModifiers(mods)
         currentConfig.enableVimKeys = vim
         AppConfigStore.save(currentConfig)
-        registerDisplayHotkeys()
+
+        if currentConfig.hotkey != prevHotkey {
+            registerTileHotkey()
+        }
+        if currentConfig.moveToDisplayPrefix != prevPrefix || vim != prevVim {
+            registerDisplayHotkeys()
+        }
     }
 
     private func ensureAXTrust() {
@@ -136,10 +139,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if AXIsProcessTrustedWithOptions(opts) { return }
 
         let a = NSAlert()
-        a.messageText = "TileBar 需要 Accessibility 权限"
-        a.informativeText = "请在『系统设置 → 隐私与安全性 → 辅助功能』中勾选 TileBar，然后回到这里。"
-        a.addButton(withTitle: "打开系统设置")
-        a.addButton(withTitle: "稍后")
+        a.messageText = L10n.axTitle
+        a.informativeText = L10n.axBody
+        a.addButton(withTitle: L10n.axOpenSettings)
+        a.addButton(withTitle: L10n.axLater)
         if a.runModal() == .alertFirstButtonReturn,
            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
