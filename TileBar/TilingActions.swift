@@ -5,6 +5,16 @@ import Cocoa
 final class TilingActions {
     static let shared = TilingActions()
 
+    /// Post-completion lockout. Stops a single physical hotkey from
+    /// firing twice (key repeat / contact bounce), without making the
+    /// user wait noticeably to re-tile after a real second press.
+    private static let debounceAfter: TimeInterval = 0.15
+
+    /// Fired around the synchronous tile/move work. Used by the menu bar
+    /// to swap to a "busy" icon so the user has feedback that the press
+    /// was received even when the work blocks the main runloop.
+    var onBusyChanged: ((Bool) -> Void)?
+
     private var pre: WindowSnapshot?
     private var post: WindowSnapshot?
     private var inFlight = false
@@ -12,10 +22,14 @@ final class TilingActions {
     /// Smart toggle: if the user hasn't moved any window since the last tile,
     /// undo. Otherwise tile fresh.
     func toggle() {
-        guard !inFlight else { return }
+        guard !inFlight else { Logger.log("toggle dropped: still busy"); return }
         inFlight = true
+        onBusyChanged?(true)
         defer {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.inFlight = false }
+            onBusyChanged?(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceAfter) {
+                self.inFlight = false
+            }
         }
 
         if let post = post,
@@ -34,10 +48,14 @@ final class TilingActions {
     /// Force a fresh tile, regardless of toggle state. Used by the explicit
     /// "立即平铺" menu item.
     func tileNow() {
-        guard !inFlight else { return }
+        guard !inFlight else { Logger.log("tileNow dropped: still busy"); return }
         inFlight = true
+        onBusyChanged?(true)
         defer {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.inFlight = false }
+            onBusyChanged?(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceAfter) {
+                self.inFlight = false
+            }
         }
         guard let result = TilingPipeline.runTile() else { return }
         self.pre = result.pre
@@ -57,11 +75,15 @@ final class TilingActions {
     /// reliable.
     func moveFocusedInDirection(_ direction: SpatialDirection) {
         Logger.log("hotkey: direction \(direction)")
-        guard !inFlight else { Logger.log("  inFlight, skipping"); return }
+        guard !inFlight else { Logger.log("  dropped: still busy"); return }
         guard NSScreen.screens.count >= 2 else { Logger.log("  single display"); return }
         inFlight = true
+        onBusyChanged?(true)
         defer {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.inFlight = false }
+            onBusyChanged?(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceAfter) {
+                self.inFlight = false
+            }
         }
         guard let focused = MoveActions.captureFocused() else { Logger.log("  no focused window"); return }
         guard let target = MoveActions.directionTarget(direction, from: focused) else { return }
@@ -76,11 +98,15 @@ final class TilingActions {
     /// If only one display is connected, the action is a no-op.
     func moveFocusedToDisplay(_ index: Int) {
         Logger.log("hotkey: digit \(index)")
-        guard !inFlight else { Logger.log("  inFlight, skipping"); return }
+        guard !inFlight else { Logger.log("  dropped: still busy"); return }
         guard NSScreen.screens.count >= 2 else { Logger.log("  single display"); return }
         inFlight = true
+        onBusyChanged?(true)
         defer {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.inFlight = false }
+            onBusyChanged?(false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceAfter) {
+                self.inFlight = false
+            }
         }
         guard let focused = MoveActions.captureFocused() else { Logger.log("  no focused window"); return }
         runMoveAndRetile(focused: focused, dstIndex: index)

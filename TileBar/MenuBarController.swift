@@ -5,6 +5,11 @@ final class MenuBarController: NSObject {
     private let menu = NSMenu()
     private var recorder: HotkeyRecorderWindow?
 
+    private static let idleIcon = NSImage(systemSymbolName: "square.grid.2x2",
+                                          accessibilityDescription: "TileBar")
+    private static let busyIcon = NSImage(systemSymbolName: "square.grid.2x2.fill",
+                                          accessibilityDescription: "TileBar (busy)")
+
     /// Tile hotkey was changed via the recorder. AppDelegate persists +
     /// re-registers.
     var onHotkeyChanged: ((HotkeySpec) -> Void)?
@@ -27,8 +32,7 @@ final class MenuBarController: NSObject {
     override init() {
         super.init()
         if let btn = statusItem.button {
-            btn.image = NSImage(systemSymbolName: "square.grid.2x2",
-                                accessibilityDescription: "TileBar")
+            btn.image = Self.idleIcon
             btn.target = self
             btn.action = #selector(handleClick(_:))
             btn.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -41,6 +45,16 @@ final class MenuBarController: NSObject {
             selector: #selector(handleScreenChange),
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil)
+    }
+
+    /// Swap the menu bar icon between idle and busy. Called synchronously
+    /// around the tile/move work in TilingActions; `display()` forces an
+    /// immediate redraw so the user sees the change even though the main
+    /// runloop is about to block on the AX RPCs.
+    func setBusy(_ busy: Bool) {
+        guard let btn = statusItem.button else { return }
+        btn.image = busy ? Self.busyIcon : Self.idleIcon
+        btn.display()
     }
 
     @objc private func handleScreenChange() {

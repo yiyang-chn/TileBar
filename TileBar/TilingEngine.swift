@@ -13,8 +13,18 @@ enum TilingEngine {
         let weighted = items.map { ($0.0, max($0.1, 1e-3)) }
         let total = weighted.map(\.1).reduce(0, +)
         let area = Double(bounds.width * bounds.height)
+        // Primary key: weight desc (squarify wants largest first).
+        // Secondary key: current geometry top-left — same-weight windows
+        // keep their relative spatial order across re-tiles, so the layout
+        // feels like an "incremental snap" rather than a full reshuffle.
         let scaled = weighted
-            .sorted { $0.1 > $1.1 }
+            .sorted { a, b in
+                if a.1 != b.1 { return a.1 > b.1 }
+                if a.0.bounds.minY != b.0.bounds.minY {
+                    return a.0.bounds.minY < b.0.bounds.minY
+                }
+                return a.0.bounds.minX < b.0.bounds.minX
+            }
             .map { ($0.0, $0.1 / total * area) }
 
         var rects: [(WindowInfo, CGRect)] = []
@@ -137,11 +147,25 @@ struct WindowSnapshot {
 
 enum TilingPipeline {
     private static let maxIterations = 10
-    /// A window is "overflowing" when its actual size exceeds the target by
-    /// more than this many pixels along either axis. Electron apps have
-    /// min-sizes that the algorithm only approaches asymptotically, so a
-    /// few-pixel slack avoids spinning forever for "almost there" layouts.
-    private static let overflowSlack: CGFloat = 10
+    /// Overflow tolerance is computed *relative to the target size* — see
+    /// `slackFor(_:)`. A 1800px-wide target absorbs ~27px of overflow as
+    /// noise; a 600px target absorbs only ~9px. Floor of 8px so the check
+    /// never gets absurdly tight on tiny windows.
+    private static let overflowRelative: CGFloat = 0.015
+    private static let overflowFloor: CGFloat = 8
+
+    /// Per-bundleID minimum size learned across runs *within the same
+    /// process lifetime*. Populated whenever overflow is detected: the
+    /// actual size at that moment is the app's enforced minimum (or close
+    /// to it), and that's the size we want to plan around next time so
+    /// the iteration converges in one shot instead of grinding through
+    /// the asymptotic shrink. Not persisted — re-learned after relaunch,
+    /// which costs at most one extra iteration per stubborn app.
+    private static var knownMinSizes: [String: CGSize] = [:]
+
+    private static func slackFor(_ side: CGFloat) -> CGFloat {
+        max(overflowFloor, side * overflowRelative)
+    }
 
     /// Tile all visible app windows across all connected displays. Each
     /// display's windows are squarified independently within that display's
@@ -195,6 +219,41 @@ enum TilingPipeline {
         var weights: [CGWindowID: Double] = [:]
         for w in groupedWins { weights[w.cgWindowID] = ContentMeasurer.weight(for: w) }
 
+        // bundleID lookup so the iteration loop can record observed
+        // min-sizes back into `knownMinSizes`.
+        let bidByWid: [CGWindowID: String] = Dictionary(
+            uniqueKeysWithValues: groupedWins.compactMap { w in
+                w.bundleID.map { (w.cgWindowID, $0) }
+            })
+
+        // Pre-boost from learned min-sizes: if a window's category weight
+        // would allocate it less area than we've previously observed it
+        // refusing to shrink below, scale up its weight to match. Done
+        // per-display since each display tiles independently. The
+        // existing iteration loop will still correct any residual error,
+        // but typically converges in 1-2 rounds instead of 4-5.
+        for (_, group) in groups {
+            let bounds = ScreenGeometry.cgVisibleFrame(of: group.screen)
+            let displayArea = Double(bounds.width * bounds.height)
+            guard displayArea > 0 else { continue }
+            var groupTotal = group.wins.reduce(0.0) {
+                $0 + (weights[$1.cgWindowID] ?? 1.0)
+            }
+            for w in group.wins {
+                guard let bid = w.bundleID,
+                      let minSz = knownMinSizes[bid] else { continue }
+                let minArea = Double(minSz.width * minSz.height)
+                guard minArea > 0, groupTotal > 0 else { continue }
+                let curWeight = weights[w.cgWindowID] ?? 1.0
+                let curArea = curWeight / groupTotal * displayArea
+                if curArea > 0, curArea < minArea {
+                    let factor = minArea / curArea
+                    weights[w.cgWindowID] = curWeight * factor
+                    groupTotal += curWeight * (factor - 1)
+                }
+            }
+        }
+
         var prevOverflowPx = CGFloat.infinity
         for attempt in 1...maxIterations {
             var overflows = 0
@@ -216,12 +275,23 @@ enum TilingPipeline {
                           let actual = AXWindowMover.readRect(ax) else { continue }
                     let ovW = max(0, actual.width - t.target.width)
                     let ovH = max(0, actual.height - t.target.height)
-                    if ovW > overflowSlack || ovH > overflowSlack {
+                    if ovW > slackFor(t.target.width) || ovH > slackFor(t.target.height) {
                         let factor = Double(actual.width * actual.height)
                                     / max(1, Double(t.target.width * t.target.height))
                         weights[t.cgWindowID] = (weights[t.cgWindowID] ?? 1.0) * factor
                         overflows += 1
                         overflowPx += ovW + ovH
+                        // Record the observed min-size for this bundleID.
+                        // `actual` is the app's enforced floor at this
+                        // moment (we asked for smaller, it refused). Take
+                        // max so multiple observations across a session
+                        // converge upward to a stable upper bound.
+                        if let bid = bidByWid[t.cgWindowID] {
+                            let prev = knownMinSizes[bid] ?? .zero
+                            knownMinSizes[bid] = CGSize(
+                                width: max(prev.width, actual.width),
+                                height: max(prev.height, actual.height))
+                        }
                     }
                 }
             }
@@ -232,8 +302,10 @@ enum TilingPipeline {
             }
             // Magnitude-based early exit: a stubborn overflow that keeps
             // shrinking is fine; one that plateaus means we're geometrically
-            // stuck and more iterations won't help.
-            if overflowPx > prevOverflowPx * 0.95 {
+            // stuck and more iterations won't help. Threshold 0.98 means
+            // <2% improvement counts as plateaued — gives slow-but-still-
+            // progressing convergence one or two more shots before bailing.
+            if overflowPx > prevOverflowPx * 0.98 {
                 Logger.log("tile stalled at \(attempt) (overflows=\(overflows) px=\(Int(overflowPx)))")
                 break
             }

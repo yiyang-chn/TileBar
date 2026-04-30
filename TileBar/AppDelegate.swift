@@ -18,6 +18,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onMoveToDisplay = { idx in TilingActions.shared.moveFocusedToDisplay(idx) }
         menuBar.onMoveInDirection = { dir in TilingActions.shared.moveFocusedInDirection(dir) }
         menuBar.onReloadConfig = { [weak self] in self?.reloadConfig() }
+        // Visual feedback while a tile/move is in progress. Bridged here
+        // so TilingActions stays UI-agnostic.
+        TilingActions.shared.onBusyChanged = { [weak self] busy in
+            self?.menuBar.setBusy(busy)
+        }
         currentConfig = AppConfigStore.load()
         registerAllHotkeys()
         ensureAXTrust()
