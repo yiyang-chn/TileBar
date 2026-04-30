@@ -93,6 +93,12 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 **Move-to-display semantics**: it's an atomic *move + auto-retile*. Once the window lands on the destination display, both source and destination get re-squarified. The smart toggle's `pre` snapshot points at the layout *before* the move, so a follow-up ⌘⌥T undoes the entire compound operation in one shot.
 
+### Position-aware tiling
+
+The tile algorithm has two stages: **weights decide rectangle sizes**, **your current window positions decide which rectangle each window goes to**. So if the default tile puts Slack on the left and Claude on the right but you'd rather have it the other way around, just drag them to swap and tile again — the layout adopts your spatial preference. Chrome still ends up bigger than Terminal (weights), but where each app sits is up to you (positions).
+
+Within a single display, assignment minimizes total window→rectangle displacement.
+
 ### Multi-display
 
 Each display is squarified independently. A window is assigned to the display covering the largest portion of it (a window straddling two screens goes to the one with more area).

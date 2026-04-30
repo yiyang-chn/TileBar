@@ -8,33 +8,124 @@ struct TileResult {
 }
 
 enum TilingEngine {
+    /// Two-stage layout:
+    ///   1. Squarify the *weights* into N rectangles. Weight desc input
+    ///      keeps aspect ratios close to 1 — Chrome still ends up bigger
+    ///      than Terminal.
+    ///   2. Assign each input window to the rectangle whose center is
+    ///      closest to the window's current center, minimizing total
+    ///      squared displacement. This is what makes drag-then-tile
+    ///      respect the user's spatial intent: drag Claude to the left
+    ///      of Slack, retile, and Claude lands in whatever rectangle
+    ///      sits on the left side of the layout.
+    ///
+    /// The squarify-pairing is incidental — it pairs (window, rect) by
+    /// weight order to satisfy the inner algorithm; we drop the pairing
+    /// immediately and redo it by proximity.
     static func tile(_ items: [(WindowInfo, Double)], in bounds: CGRect) -> [TileResult] {
         guard !items.isEmpty else { return [] }
         let weighted = items.map { ($0.0, max($0.1, 1e-3)) }
         let total = weighted.map(\.1).reduce(0, +)
         let area = Double(bounds.width * bounds.height)
-        // Primary key: weight desc (squarify wants largest first).
-        // Secondary key: current geometry top-left — same-weight windows
-        // keep their relative spatial order across re-tiles, so the layout
-        // feels like an "incremental snap" rather than a full reshuffle.
-        let scaled = weighted
-            .sorted { a, b in
-                if a.1 != b.1 { return a.1 > b.1 }
-                if a.0.bounds.minY != b.0.bounds.minY {
-                    return a.0.bounds.minY < b.0.bounds.minY
-                }
-                return a.0.bounds.minX < b.0.bounds.minX
-            }
+
+        // Stage 1: produce target rectangles via squarify. Areas in
+        // descending order is what squarify needs internally — it does
+        // not have to match the assignment we want at the end.
+        let scaledByWeight = weighted
+            .sorted { $0.1 > $1.1 }
             .map { ($0.0, $0.1 / total * area) }
+        var paired: [(WindowInfo, CGRect)] = []
+        squarify(scaledByWeight, in: bounds, out: &paired)
+        let rects = paired.map { $0.1 }
 
-        var rects: [(WindowInfo, CGRect)] = []
-        squarify(scaled, in: bounds, out: &rects)
+        // Stage 2: assign windows to rectangles by spatial proximity.
+        let windowCenters = items.map {
+            CGPoint(x: $0.0.bounds.midX, y: $0.0.bounds.midY)
+        }
+        let rectCenters = rects.map {
+            CGPoint(x: $0.midX, y: $0.midY)
+        }
+        let assignment = assignByProximity(windows: windowCenters, rects: rectCenters)
 
-        return rects.map { pair in
-            TileResult(pid: pair.0.pid,
-                       cgWindowID: pair.0.cgWindowID,
-                       cgRect: pair.0.bounds,
-                       target: pair.1.integral)
+        return items.indices.map { i in
+            TileResult(pid: items[i].0.pid,
+                       cgWindowID: items[i].0.cgWindowID,
+                       cgRect: items[i].0.bounds,
+                       target: rects[assignment[i]].integral)
+        }
+    }
+
+    /// Returns `result[i] = j`, meaning window i should be placed into
+    /// rect j. Optimal (min total squared center-distance) by brute-force
+    /// permutation for N ≤ 8 — a single display rarely holds more.
+    /// Greedy nearest-pair fallback for N ≥ 9 (acceptably non-optimal
+    /// but always finishes in O(n² log n)).
+    private static func assignByProximity(
+        windows: [CGPoint], rects: [CGPoint]
+    ) -> [Int] {
+        let n = windows.count
+        precondition(n == rects.count)
+        if n <= 1 { return Array(0..<n) }
+
+        if n <= 8 {
+            var perm = Array(0..<n)
+            var bestPerm = perm
+            var bestCost = costOf(perm, windows, rects)
+            permute(&perm, from: 0) { current in
+                let c = costOf(current, windows, rects)
+                if c < bestCost {
+                    bestCost = c
+                    bestPerm = current
+                }
+            }
+            return bestPerm
+        }
+
+        // Greedy fallback: keep grabbing the closest unmatched
+        // (window, rect) pair until everyone is assigned.
+        var assigned = Array(repeating: -1, count: n)
+        var usedRects = Set<Int>()
+        let pairs: [(w: Int, r: Int, d: Double)] = (0..<n).flatMap { wi in
+            (0..<n).map { ri in
+                let dx = windows[wi].x - rects[ri].x
+                let dy = windows[wi].y - rects[ri].y
+                return (wi, ri, Double(dx * dx + dy * dy))
+            }
+        }.sorted { $0.d < $1.d }
+        for p in pairs {
+            if assigned[p.w] == -1 && !usedRects.contains(p.r) {
+                assigned[p.w] = p.r
+                usedRects.insert(p.r)
+            }
+        }
+        return assigned
+    }
+
+    private static func costOf(_ perm: [Int],
+                               _ windows: [CGPoint],
+                               _ rects: [CGPoint]) -> Double {
+        var sum = 0.0
+        for (i, j) in perm.enumerated() {
+            let dx = windows[i].x - rects[j].x
+            let dy = windows[i].y - rects[j].y
+            sum += Double(dx * dx + dy * dy)
+        }
+        return sum
+    }
+
+    /// Standard recursive in-place permutation generator. Visits `a`
+    /// once for each of the n! orderings.
+    private static func permute(_ a: inout [Int],
+                                from start: Int,
+                                visit: ([Int]) -> Void) {
+        if start == a.count {
+            visit(a)
+            return
+        }
+        for i in start..<a.count {
+            a.swapAt(start, i)
+            permute(&a, from: start + 1, visit: visit)
+            a.swapAt(start, i)
         }
     }
 
