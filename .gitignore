@@ -24,3 +24,5 @@ Package.resolved
 
 # 个人配置
 xcuserdata/
+dist/
+.claude/

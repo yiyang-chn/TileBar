@@ -19,6 +19,27 @@ xcodebuild -project TileBar.xcodeproj -scheme TileBar -configuration Release \
 cp -R build/Build/Products/Release/TileBar.app ~/Applications/
 ```
 
+## Packaging for distribution
+
+To bundle the Release `.app` into a styled DMG you can hand to a friend:
+
+```bash
+brew install create-dmg     # one-time
+scripts/package.sh          # → dist/TileBar-<version>.dmg
+```
+
+Output is roughly 800KB. The DMG is self-signed (same `TileBarLocal`
+identity as the app), **not Apple-notarized** — recipients will see
+"developer cannot be verified" on first launch and need to follow the
+**First launch** dance below. For zero-warning installs you'd need an
+Apple Developer ID + `xcrun notarytool`, which this repo does not set up.
+
+Re-generate the DMG background image only when redesigning it:
+
+```bash
+swift scripts/make-dmg-background.swift > scripts/dmg-background.png
+```
+
 ## First launch (macOS 15 Sequoia and later)
 
 ```bash

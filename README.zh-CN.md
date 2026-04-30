@@ -19,6 +19,26 @@ xcodebuild -project TileBar.xcodeproj -scheme TileBar -configuration Release \
 cp -R build/Build/Products/Release/TileBar.app ~/Applications/
 ```
 
+## 打包成 DMG 分享
+
+把 Release `.app` 包成带背景图的 DMG，方便发给朋友：
+
+```bash
+brew install create-dmg     # 一次性
+scripts/package.sh          # → dist/TileBar-<版本号>.dmg
+```
+
+DMG 大约 800KB。用的是 `TileBarLocal` 自签证书，**没有过 Apple 公证**——
+朋友首次打开还是会看到"无法验证开发者"，要按下面"首次启动"那段解决。
+想要零警告安装，得办 Apple Developer 账号 + `xcrun notarytool` 公证，
+本仓库不涉及这套流程。
+
+DMG 背景图只在重新设计时再跑：
+
+```bash
+swift scripts/make-dmg-background.swift > scripts/dmg-background.png
+```
+
 ## 首次启动（macOS 15 Sequoia 及以上）
 
 ```bash
