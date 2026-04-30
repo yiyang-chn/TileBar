@@ -95,9 +95,7 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 ### Position-aware tiling
 
-The tile algorithm has two stages: **weights decide rectangle sizes**, **your current window positions decide which rectangle each window goes to**. So if the default tile puts Slack on the left and Claude on the right but you'd rather have it the other way around, just drag them to swap and tile again — the layout adopts your spatial preference. Chrome still ends up bigger than Terminal (weights), but where each app sits is up to you (positions).
-
-Within a single display, assignment minimizes total window→rectangle displacement.
+Windows are fed to squarify in **your current spatial order** (top-to-bottom, left-to-right). Each window's slot ends up where you put it, sized by its weight. Drag a heavy window to the left and the left slot grows to match. So if the default tile puts Slack on the left and Claude on the right but you'd rather have it the other way around, just drag them to swap and tile again. Weights still decide *how big*; your drag decides *where*.
 
 ### Multi-display
 
