@@ -93,9 +93,11 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 **Move-to-display semantics**: it's an atomic *move + auto-retile*. Once the window lands on the destination display, both source and destination get re-squarified. The smart toggle's `pre` snapshot points at the layout *before* the move, so a follow-up ⌘⌥T undoes the entire compound operation in one shot.
 
-### Position-aware tiling
+### How the layout is decided
 
-Windows are fed to squarify in **your current spatial order** (top-to-bottom, left-to-right). Each window's slot ends up where you put it, sized by its weight. Drag a heavy window to the left and the left slot grows to match. So if the default tile puts Slack on the left and Claude on the right but you'd rather have it the other way around, just drag them to swap and tile again. Weights still decide *how big*; your drag decides *where*.
+The squarify algorithm is fed windows in **descending weight order**, so heavier apps land in the larger, better-placed slots — Chrome ends up dominant, Slack and Claude stack neatly to the right of it on a typical 16:9 display.
+
+Drag-to-swap works **within a weight tier**: two same-weight windows (e.g. two Chrome windows you arranged side-by-side) keep that arrangement across retiles. Across different weights, weight always wins — you can't drag Chrome into Terminal's small corner; the next tile would put Chrome back in the dominant slot. To override the default size of a specific app, edit the weights table at [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift).
 
 ### Multi-display
 

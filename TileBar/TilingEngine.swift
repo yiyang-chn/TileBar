@@ -8,29 +8,36 @@ struct TileResult {
 }
 
 enum TilingEngine {
-    /// Squarify processes the input queue in order, placing the first
-    /// item in the top-left of `bounds` and proceeding row-by-row across
-    /// it. So the queue's *order* directly determines visual placement:
-    /// feed it spatially-sorted input (top-to-bottom, left-to-right by
-    /// current window center) and the layout naturally reflects the
-    /// user's drag arrangement. The slot at queue position N has area
-    /// proportional to that window's weight, so a heavy window dragged
-    /// to the left produces a big left slot — sizes track weights, but
-    /// positions track user intent. This avoids the "Chrome ended up
-    /// in Terminal's tiny corner because I dragged it there" footgun
-    /// that a separate position→rectangle assignment pass would have.
+    /// Sort key, primary → tertiary:
+    ///   1. Weight desc — heaviest into the dominant squarify slot.
+    ///      Squarify is sensitive to input order; feeding it weight-desc
+    ///      is what produces the "main app on the left, lighter ones
+    ///      stacked on the right" layout users intuitively expect on a
+    ///      standard 16:9 / 16:10 display.
+    ///   2. Spatial reading order (top-to-bottom, then left-to-right)
+    ///      to break ties *within the same weight*. This is what makes
+    ///      drag-to-swap work for genuinely same-weight windows — e.g.
+    ///      two Chrome windows arranged side-by-side keep their
+    ///      arrangement across re-tiles.
+    ///   3. cgWindowID for absolute determinism when (weight, position)
+    ///      collide — rare, but possible for brand-new windows that
+    ///      opened at the same default location.
+    ///
+    /// Cross-weight drag-to-swap is intentionally *not* supported.
+    /// Tried it (assignment-by-proximity, then spatial-order squarify)
+    /// and both broke the "heavier window gets the bigger slot"
+    /// invariant in ways users found worse than the problem they
+    /// solved. To put a window in a different slot, change its weight
+    /// in ContentMeasurer.
     static func tile(_ items: [(WindowInfo, Double)], in bounds: CGRect) -> [TileResult] {
         guard !items.isEmpty else { return [] }
         let weighted = items.map { ($0.0, max($0.1, 1e-3)) }
         let total = weighted.map(\.1).reduce(0, +)
         let area = Double(bounds.width * bounds.height)
 
-        // Spatial reading order. cgWindowID tiebreak makes the sort
-        // deterministic for windows that happen to share a corner
-        // (e.g. brand-new windows that all opened at the same default
-        // location and haven't been moved yet).
         let scaled = weighted
             .sorted { a, b in
+                if a.1 != b.1 { return a.1 > b.1 }
                 if a.0.bounds.minY != b.0.bounds.minY {
                     return a.0.bounds.minY < b.0.bounds.minY
                 }
