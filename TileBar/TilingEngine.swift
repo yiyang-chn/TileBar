@@ -8,20 +8,23 @@ struct TileResult {
 }
 
 enum TilingEngine {
-    /// Position-first sort. Spatial order is the *primary* signal — drag
-    /// is the user's way of saying "this window goes here." Weights only
-    /// influence size (via the input area), never queue position.
+    /// Position-first sort, but with a **band** of spatial tolerance so
+    /// users don't have to align windows pixel-perfectly to express
+    /// "these two are in the same column / row."
     ///
-    /// Axis choice tracks squarify's strip direction in the target rect:
-    ///   - Landscape rect: strips run down the left, items within a strip
-    ///     stack vertically. Sorting by (minX, minY) keeps column-mates
-    ///     consecutive in the queue, so squarify groups them into the
-    ///     same vertical strip — producing the user's "column+stack"
-    ///     arrangement when their drag implies one.
-    ///   - Portrait rect: strips run across the top, items spread
-    ///     horizontally. Sort flips to (minY, minX).
-    /// cgWindowID tiebreaks brand-new windows that opened on top of one
-    /// another at the same default location.
+    /// The primary axis tracks squarify's strip direction in the target:
+    ///   - Landscape rect: strips run down the left → bucket by midX.
+    ///     Two windows whose horizontal centers fall in the same band
+    ///     (default 100px) are treated as sharing a column, and within
+    ///     the band they're ordered top-to-bottom (midY).
+    ///   - Portrait rect: strips run across the top → bucket by midY.
+    /// cgWindowID tiebreaks windows that genuinely overlap (e.g. brand-
+    /// new windows opened at the same default position).
+    ///
+    /// Sizes come purely from static weights (ContentMeasurer); current
+    /// window size does *not* feed into the layout. The user explicitly
+    /// asked for predictable per-app proportions independent of how
+    /// they happen to have things sized at the moment.
     static func tile(_ items: [(WindowInfo, Double)], in bounds: CGRect) -> [TileResult] {
         guard !items.isEmpty else { return [] }
         let weighted = items.map { ($0.0, max($0.1, 1e-3)) }
@@ -29,22 +32,21 @@ enum TilingEngine {
         let area = Double(bounds.width * bounds.height)
 
         let landscape = bounds.width >= bounds.height
+        let band: CGFloat = 100  // px
+
         let scaled = weighted
             .sorted { a, b in
+                let am = a.0.bounds, bm = b.0.bounds
                 if landscape {
-                    if a.0.bounds.minX != b.0.bounds.minX {
-                        return a.0.bounds.minX < b.0.bounds.minX
-                    }
-                    if a.0.bounds.minY != b.0.bounds.minY {
-                        return a.0.bounds.minY < b.0.bounds.minY
-                    }
+                    let aB = floor(am.midX / band)
+                    let bB = floor(bm.midX / band)
+                    if aB != bB { return aB < bB }
+                    if am.midY != bm.midY { return am.midY < bm.midY }
                 } else {
-                    if a.0.bounds.minY != b.0.bounds.minY {
-                        return a.0.bounds.minY < b.0.bounds.minY
-                    }
-                    if a.0.bounds.minX != b.0.bounds.minX {
-                        return a.0.bounds.minX < b.0.bounds.minX
-                    }
+                    let aB = floor(am.midY / band)
+                    let bB = floor(bm.midY / band)
+                    if aB != bB { return aB < bB }
+                    if am.midX != bm.midX { return am.midX < bm.midX }
                 }
                 return a.0.cgWindowID < b.0.cgWindowID
             }
@@ -239,18 +241,15 @@ enum TilingPipeline {
             }
         }
 
-        // Weight = current window area × ContentMeasurer multiplier.
-        // The current-area term is what makes drag-to-resize translate
-        // into "this window should be bigger after tiling" — drag a
-        // window to take up half the screen, retile, and it occupies
-        // about half the layout. The static multiplier provides a
-        // category bias so a freshly-opened browser still ends up bigger
-        // than a freshly-opened terminal, even if their default open
-        // sizes are similar.
+        // Weight = static ContentMeasurer multiplier. Current size is
+        // intentionally NOT part of the weight — the user wants per-app
+        // proportions to be predictable defaults (Chrome stays around
+        // 53% on a 16:9 display because its multiplier is 2.2 out of
+        // ~4.1 total), independent of whatever sizes happened to exist
+        // before the tile. Drag is for *position*, not for size.
         var weights: [CGWindowID: Double] = [:]
         for w in groupedWins {
-            let currentArea = max(Double(w.bounds.width * w.bounds.height), 1)
-            weights[w.cgWindowID] = currentArea * ContentMeasurer.weight(for: w)
+            weights[w.cgWindowID] = ContentMeasurer.weight(for: w)
         }
 
         // bundleID lookup so the iteration loop can record observed

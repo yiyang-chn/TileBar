@@ -95,12 +95,10 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 ### How the layout is decided
 
-Two signals combine:
+Two independent signals:
 
-- **Position** — your current window arrangement is the *primary* signal. Squarify is fed windows in spatial order (column-major on landscape displays, row-major on portrait), so the layout reflects where you've put each window. Drag a window to a different side, retile, and it stays on that side.
-- **Size** — each window's slot area is proportional to its current area × a per-app default multiplier from [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift). So drag a window bigger and it claims a bigger slot in the next tile; the multiplier provides a category bias (browsers ≈ 2×, terminals ≈ 0.6×) so freshly-opened apps land in reasonable proportions before you've customized anything.
-
-In practice: to make Slack dominant on the right, just drag Slack to be big and on the right. To swap Slack/Claude positions, drag them past each other and retile. The default multipliers only matter when sizes are similar; once you've expressed a preference by dragging, your sizes win.
+- **Position** — your drag arrangement decides which slot each window goes into. Windows are sorted into queue order using a banded spatial sort (column-major on landscape, row-major on portrait): two windows whose centers fall within the same 100px band along the primary axis are treated as sharing a column / row, then ordered top-to-bottom (or left-to-right) within the band. This means you don't have to align windows pixel-perfectly to express "these two are stacked on the right" — squarify will group them.
+- **Size** — slot areas come from the static per-app weights in [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift). Chrome (2.2) ends up ~53% of a 16:9 display next to a Claude/Slack pair, regardless of how large any window happens to be before the tile. Drag is for *position*, not size. Edit the weights table if you want different per-app proportions.
 
 ### Multi-display
 
