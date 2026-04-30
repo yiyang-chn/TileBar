@@ -8,41 +8,43 @@ struct TileResult {
 }
 
 enum TilingEngine {
-    /// Sort key, primary → tertiary:
-    ///   1. Weight desc — heaviest into the dominant squarify slot.
-    ///      Squarify is sensitive to input order; feeding it weight-desc
-    ///      is what produces the "main app on the left, lighter ones
-    ///      stacked on the right" layout users intuitively expect on a
-    ///      standard 16:9 / 16:10 display.
-    ///   2. Spatial reading order (top-to-bottom, then left-to-right)
-    ///      to break ties *within the same weight*. This is what makes
-    ///      drag-to-swap work for genuinely same-weight windows — e.g.
-    ///      two Chrome windows arranged side-by-side keep their
-    ///      arrangement across re-tiles.
-    ///   3. cgWindowID for absolute determinism when (weight, position)
-    ///      collide — rare, but possible for brand-new windows that
-    ///      opened at the same default location.
+    /// Position-first sort. Spatial order is the *primary* signal — drag
+    /// is the user's way of saying "this window goes here." Weights only
+    /// influence size (via the input area), never queue position.
     ///
-    /// Cross-weight drag-to-swap is intentionally *not* supported.
-    /// Tried it (assignment-by-proximity, then spatial-order squarify)
-    /// and both broke the "heavier window gets the bigger slot"
-    /// invariant in ways users found worse than the problem they
-    /// solved. To put a window in a different slot, change its weight
-    /// in ContentMeasurer.
+    /// Axis choice tracks squarify's strip direction in the target rect:
+    ///   - Landscape rect: strips run down the left, items within a strip
+    ///     stack vertically. Sorting by (minX, minY) keeps column-mates
+    ///     consecutive in the queue, so squarify groups them into the
+    ///     same vertical strip — producing the user's "column+stack"
+    ///     arrangement when their drag implies one.
+    ///   - Portrait rect: strips run across the top, items spread
+    ///     horizontally. Sort flips to (minY, minX).
+    /// cgWindowID tiebreaks brand-new windows that opened on top of one
+    /// another at the same default location.
     static func tile(_ items: [(WindowInfo, Double)], in bounds: CGRect) -> [TileResult] {
         guard !items.isEmpty else { return [] }
         let weighted = items.map { ($0.0, max($0.1, 1e-3)) }
         let total = weighted.map(\.1).reduce(0, +)
         let area = Double(bounds.width * bounds.height)
 
+        let landscape = bounds.width >= bounds.height
         let scaled = weighted
             .sorted { a, b in
-                if a.1 != b.1 { return a.1 > b.1 }
-                if a.0.bounds.minY != b.0.bounds.minY {
-                    return a.0.bounds.minY < b.0.bounds.minY
-                }
-                if a.0.bounds.minX != b.0.bounds.minX {
-                    return a.0.bounds.minX < b.0.bounds.minX
+                if landscape {
+                    if a.0.bounds.minX != b.0.bounds.minX {
+                        return a.0.bounds.minX < b.0.bounds.minX
+                    }
+                    if a.0.bounds.minY != b.0.bounds.minY {
+                        return a.0.bounds.minY < b.0.bounds.minY
+                    }
+                } else {
+                    if a.0.bounds.minY != b.0.bounds.minY {
+                        return a.0.bounds.minY < b.0.bounds.minY
+                    }
+                    if a.0.bounds.minX != b.0.bounds.minX {
+                        return a.0.bounds.minX < b.0.bounds.minX
+                    }
                 }
                 return a.0.cgWindowID < b.0.cgWindowID
             }
@@ -237,8 +239,19 @@ enum TilingPipeline {
             }
         }
 
+        // Weight = current window area × ContentMeasurer multiplier.
+        // The current-area term is what makes drag-to-resize translate
+        // into "this window should be bigger after tiling" — drag a
+        // window to take up half the screen, retile, and it occupies
+        // about half the layout. The static multiplier provides a
+        // category bias so a freshly-opened browser still ends up bigger
+        // than a freshly-opened terminal, even if their default open
+        // sizes are similar.
         var weights: [CGWindowID: Double] = [:]
-        for w in groupedWins { weights[w.cgWindowID] = ContentMeasurer.weight(for: w) }
+        for w in groupedWins {
+            let currentArea = max(Double(w.bounds.width * w.bounds.height), 1)
+            weights[w.cgWindowID] = currentArea * ContentMeasurer.weight(for: w)
+        }
 
         // bundleID lookup so the iteration loop can record observed
         // min-sizes back into `knownMinSizes`.

@@ -95,9 +95,12 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 ### How the layout is decided
 
-The squarify algorithm is fed windows in **descending weight order**, so heavier apps land in the larger, better-placed slots — Chrome ends up dominant, Slack and Claude stack neatly to the right of it on a typical 16:9 display.
+Two signals combine:
 
-Drag-to-swap works **within a weight tier**: two same-weight windows (e.g. two Chrome windows you arranged side-by-side) keep that arrangement across retiles. Across different weights, weight always wins — you can't drag Chrome into Terminal's small corner; the next tile would put Chrome back in the dominant slot. To override the default size of a specific app, edit the weights table at [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift).
+- **Position** — your current window arrangement is the *primary* signal. Squarify is fed windows in spatial order (column-major on landscape displays, row-major on portrait), so the layout reflects where you've put each window. Drag a window to a different side, retile, and it stays on that side.
+- **Size** — each window's slot area is proportional to its current area × a per-app default multiplier from [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift). So drag a window bigger and it claims a bigger slot in the next tile; the multiplier provides a category bias (browsers ≈ 2×, terminals ≈ 0.6×) so freshly-opened apps land in reasonable proportions before you've customized anything.
+
+In practice: to make Slack dominant on the right, just drag Slack to be big and on the right. To swap Slack/Claude positions, drag them past each other and retile. The default multipliers only matter when sizes are similar; once you've expressed a preference by dragging, your sizes win.
 
 ### Multi-display
 

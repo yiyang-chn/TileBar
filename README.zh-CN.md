@@ -94,9 +94,12 @@ open ~/Applications/TileBar.app
 
 ### 布局决策
 
-窗口按**权重降序**喂给 squarify，所以重 app 进入更大、位置更好的槽位——Chrome 占主导，Slack/Claude 在 16:9 普通显示器上整齐地堆在它右边。
+两个信号组合：
 
-**同权重档**内可以拖拽换位：两个同权重的窗口（比如你并排摆好的两个 Chrome）下次平铺会保持你摆的顺序。**跨权重档**则权重永远赢——你没法把 Chrome 拖到 Terminal 的小角落，下次平铺 Chrome 还会回到主槽位。要给某个 app 单独换大小，去 [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift) 改权重表。
+- **位置** —— 你的当前窗口排列是**主**信号。Squarify 按空间顺序喂入（横屏 column-major、竖屏 row-major），所以布局会跟着你拖到的位置走。把窗口拖到另一侧，重新平铺，它就留在那一侧。
+- **大小** —— 每个窗口的槽位面积 = 它的当前面积 × [TileBar/ContentMeasurer.swift](TileBar/ContentMeasurer.swift) 里的默认权重乘数。所以你拖大某个窗口，下次平铺它就拿更大的槽；乘数提供类别偏好（浏览器 ≈ 2×、终端 ≈ 0.6×），让刚打开还没动过的 app 也有合理比例。
+
+实际操作：想让 Slack 在右侧主导？把它拖到右侧并拖大就行。想 Slack/Claude 换位？拖过去再平铺。默认权重乘数只在你还没拖过、各窗口大小相近时起作用——一旦你拖过表达了偏好，你的尺寸就赢。
 
 ### 多显示器
 
