@@ -2,7 +2,7 @@
 
 [中文](README.zh-CN.md)
 
-A tiny macOS menu bar utility that tiles every visible app window across your displays in one click. Layout is a Squarified Treemap weighted by app category; smart toggle to undo, configurable global hotkeys, and per-display window moves.
+A tiny macOS menu bar utility that tiles every visible app window across your displays with one hotkey. Layout is a Squarified Treemap weighted by app category; smart toggle to undo, configurable global hotkeys, and per-display window moves. UI auto-localizes to 中文 or English based on system language.
 
 ## Build
 
@@ -43,17 +43,16 @@ TileBar prompts the first time you tile. Tick TileBar in **System Settings → P
 
 ### Menu bar icon
 
-- **Left click**: smart toggle.
-  - Layout ≈ last tile result (you haven't touched anything) → undo to the pre-tile state.
-  - Layout ≠ last result (window dragged, opened, or closed) → tile fresh.
-- **Right click / Control click**: drop-down menu:
-  - **Tile now**: forces a fresh tile, ignoring toggle state.
-  - **Send focused window to display N**: appears only with multiple displays, one entry per display.
-  - **Send focused window to previous/next display**: cyclic.
-  - **Set tile hotkey…**: record a new combo for the toggle.
-  - **Set move-window modifier…**: record the modifier prefix that combines with digits / arrows.
-  - **Reload config**: re-reads `~/.tilebar.json`.
+The icon flips between an outline grid (idle) and a filled grid (busy) while a tile or move is in progress, so you can see your press was received even when the AX work briefly blocks the runloop.
+
+- **Left or right click**: drop-down menu:
+  - **Tile Now**: smart toggle. Layout ≈ last tile result → undo to the pre-tile state. Layout ≠ last result → tile fresh.
+  - **Move Focused Window to Display N**: shown only with multiple displays, one entry per display (up to 9).
+  - **Move Focused Window {Left / Right / Up / Down}**: only entries whose direction has a neighbouring display in your current arrangement are shown.
+  - **Settings…**: tile hotkey, move-window modifier prefix, Vim-keys toggle — all in one panel.
   - **Quit TileBar**.
+
+For "tile / undo" without going through the menu, just use the global hotkey (default ⌘⌥T).
 
 ### Global hotkeys
 
@@ -87,8 +86,8 @@ Moves are CG-verified (not just AX-trusted, since some apps' AX layers report su
 
 Two ways:
 
-- **GUI**: right-click menu → Set tile hotkey / Set move-window modifier → press the new combo → Save.
-- **Edit the file**: edit `~/.tilebar.json`, then right-click menu → Reload config (or restart the app).
+- **GUI**: menu → **Settings…** → click the relevant field → press the new combo → **Save**. Esc cancels the in-progress recording; closing the window via X discards everything except what was already saved.
+- **Edit the file**: edit `~/.tilebar.json` and relaunch TileBar.
 
 ```json
 {
@@ -105,7 +104,7 @@ Two ways:
 
 `moveToDisplayPrefix` format: modifier-only, at least one of `cmd` / `opt` / `ctrl`. The combined main key is fixed (digits 1-N for direct targeting, ←/→/↑/↓ for spatial directions) — only the prefix is configurable.
 
-`enableVimKeys` (boolean, defaults to `false`): when true, also registers `prefix + h/j/k/l` as Vim-style aliases for the same four directions (h=left, j=down, k=up, l=right). Toggle it via the checkbox in the **Set move-window modifier…** recorder window — closing the window via X / ⌘W auto-saves the checkbox state.
+`enableVimKeys` (boolean, defaults to `false`): when true, also registers `prefix + h/j/k/l` as Vim-style aliases for the same four directions (h=left, j=down, k=up, l=right). Toggle it via the checkbox in **Settings…** and click **Save**.
 
 Malformed values don't crash; the log records `invalid ..., using default` and the app falls back to the default.
 
