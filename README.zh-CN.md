@@ -152,6 +152,7 @@ open ~/Applications/TileBar.app
 - 只在当前 Space 操作；全屏 Space、其他 Space 上的窗口会被静默跳过。
 - 对每个被操作的 app，TileBar 临时把私有属性 `AXEnhancedUserInterface` 设为 `false` 再操作完恢复。这是 Electron 应用（Slack、Discord、Claude desktop、VS Code）能被 AX 强制 resize 的唯一可靠方法，Yabai/Rectangle/Magnet 等所有 macOS 窗口管理器都用同样的 hack。如果某个 app 在平铺过程中表现出闪屏或动画异常，绝大多数情况是这个开关瞬时切换造成的，操作结束后会恢复到 app 原本的设置。
 - 极少数应用（如腾讯 QQ）即使加了 EUI workaround 也完全无视 AX setSize。TileBar 仍然能 setPosition + 把溢出的部分 clamp 回屏内，保证它整窗可见；但这种 app 在小屏上和别的窗口同处一屏时**会重叠**——这是几何不可避免，TileBar 没办法解决。
+- **小屏 + 多窗口**：13 寸笔记本上同时开 3 个以上 Electron 应用（Slack/Discord/Claude desktop/VS Code）经常会撞墙——这些应用的最小窗口尺寸塞不进 squarify 给出的任何形状。TileBar 在平铺后会检测：如果有任何两个窗口重叠超过 ~70×70px，就**回退到平铺前的布局**并在屏幕中央弹出 HUD 提示。规避：关掉一个应用、把系统设置 → 显示器换成"更多空间"模式、或者把部分窗口移到外接屏。
 
 ## 排查
 

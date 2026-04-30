@@ -153,6 +153,7 @@ What the numbers mean: relative area weight. Chrome 2.2 and Terminal 0.6 means C
 - Operates on the current Space only. Full-screen Spaces and windows on other Spaces are skipped silently.
 - For every app it manipulates, TileBar temporarily flips the private `AXEnhancedUserInterface` attribute to `false` and restores it after. This is the only reliable way to make Electron apps (Slack, Discord, Claude desktop, VS Code) actually obey AX-driven resize — same trick used by Yabai, Rectangle, Magnet, and every other macOS window manager. If you ever notice a brief animation glitch in one of those apps during tiling, that's the toggle.
 - A handful of apps (notably Tencent QQ) ignore AX setSize entirely even with that workaround. TileBar still places them via setPosition and clamps any overflow back inside the display, so they stay fully visible — but two such apps on a small external display may end up overlapping. That's geometric; nothing TileBar can do.
+- **Small displays / many apps**: 13" laptops with 3+ Electron apps (Slack, Discord, Claude desktop, VS Code) can hit a wall — the apps' minimum sizes don't fit any squarified shape on the available area. TileBar detects this after the tile attempt: if any pair of windows would end up overlapping by more than ~70×70px, the tile is rolled back to your pre-tile arrangement and a HUD notification surfaces in the screen center. Workarounds: close one app, switch to "More Space" in System Settings → Displays, or move some windows to a second display.
 
 ## Troubleshooting
 

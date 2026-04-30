@@ -6,7 +6,7 @@ import Cocoa
 /// gets visible feedback instead of wondering why ⌘⌥T did nothing.
 final class Toast: NSPanel {
     private static var current: Toast?
-    private static let visibleDuration: TimeInterval = 2.5
+    private static let visibleDuration: TimeInterval = 4.0
 
     /// Convenience: show a single toast. Replaces any prior toast that
     /// might still be on screen.
@@ -18,7 +18,7 @@ final class Toast: NSPanel {
     }
 
     init(title: String, body: String, symbol: String) {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 380, height: 76),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 520, height: 130),
                    styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered,
                    defer: false)
@@ -50,31 +50,40 @@ final class Toast: NSPanel {
         blur.blendingMode = .behindWindow
         blur.state = .active
         blur.wantsLayer = true
-        blur.layer?.cornerRadius = 14
+        blur.layer?.cornerRadius = 18
         blur.layer?.masksToBounds = true
         cv.addSubview(blur)
 
         let icon = NSImageView()
         icon.translatesAutoresizingMaskIntoConstraints = false
-        let cfg = NSImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
+        let cfg = NSImage.SymbolConfiguration(pointSize: 32, weight: .semibold)
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
         icon.contentTintColor = .systemOrange
 
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
         titleLabel.textColor = .labelColor
 
         let bodyLabel = NSTextField(wrappingLabelWithString: body)
         bodyLabel.translatesAutoresizingMaskIntoConstraints = false
-        bodyLabel.font = .systemFont(ofSize: 11)
+        bodyLabel.font = .systemFont(ofSize: 13)
         bodyLabel.textColor = .secondaryLabelColor
-        bodyLabel.maximumNumberOfLines = 2
+        bodyLabel.maximumNumberOfLines = 3
+
+        // Title + body stacked vertically as a unit, then the unit is
+        // vertically centered against the icon. Anchoring title to blur.top
+        // (the previous setup) left the text floating above the icon's
+        // vertical centerline, looking misaligned.
+        let textStack = NSStackView(views: [titleLabel, bodyLabel])
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.orientation = .vertical
+        textStack.alignment = .leading
+        textStack.spacing = 4
 
         blur.addSubview(icon)
-        blur.addSubview(titleLabel)
-        blur.addSubview(bodyLabel)
+        blur.addSubview(textStack)
 
         NSLayoutConstraint.activate([
             blur.topAnchor.constraint(equalTo: cv.topAnchor),
@@ -82,31 +91,28 @@ final class Toast: NSPanel {
             blur.leadingAnchor.constraint(equalTo: cv.leadingAnchor),
             blur.trailingAnchor.constraint(equalTo: cv.trailingAnchor),
 
-            icon.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 16),
+            icon.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 22),
             icon.centerYAnchor.constraint(equalTo: blur.centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 28),
-            icon.heightAnchor.constraint(equalToConstant: 28),
+            icon.widthAnchor.constraint(equalToConstant: 40),
+            icon.heightAnchor.constraint(equalToConstant: 40),
 
-            titleLabel.topAnchor.constraint(equalTo: blur.topAnchor, constant: 14),
-            titleLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 12),
-            titleLabel.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -16),
-
-            bodyLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
-            bodyLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            bodyLabel.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -16),
-            bodyLabel.bottomAnchor.constraint(lessThanOrEqualTo: blur.bottomAnchor, constant: -10),
+            textStack.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 18),
+            textStack.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -22),
+            textStack.centerYAnchor.constraint(equalTo: blur.centerYAnchor),
+            textStack.topAnchor.constraint(greaterThanOrEqualTo: blur.topAnchor, constant: 16),
+            textStack.bottomAnchor.constraint(lessThanOrEqualTo: blur.bottomAnchor, constant: -16),
         ])
     }
 
     private func present() {
-        // Top-center of the screen the user is most likely looking at —
+        // Dead-center of the screen the user is most likely looking at —
         // the one with key window, falling back to main.
         let screen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let s = screen else { return }
         let vf = s.visibleFrame
         let w = self.frame.width
         let h = self.frame.height
-        setFrameOrigin(NSPoint(x: vf.midX - w / 2, y: vf.maxY - h - 32))
+        setFrameOrigin(NSPoint(x: vf.midX - w / 2, y: vf.midY - h / 2))
 
         alphaValue = 0
         orderFrontRegardless()
