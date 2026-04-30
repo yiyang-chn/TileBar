@@ -95,7 +95,9 @@ Single-display setups skip the "send to display" hotkey block (digits and arrows
 
 ### Edge-drag to resize
 
-After tile, dragging the edge of any window updates its tiled neighbours in real-time: drag Chrome's right edge → Claude/Slack on the right shrink to keep the layout gapless. Drag Claude's bottom edge → Slack's top follows. Live propagation runs via AX resize observers, so it tracks your drag as you go (modulo the usual stubborn-app caveats — Tencent QQ and friends still ignore AX setSize). The session ends on the next tile or undo.
+After tile, dragging any window's edge updates everything on the same divider in real-time. Grab Chrome's right edge or the top-right window's left edge — same divider, same result: Chrome shrinks, the entire right column (top and bottom both) widens to keep the layout gapless. Grab Claude's bottom edge or Slack's top edge — same divider between them, both move with you. Live propagation runs via AX resize observers, so it tracks your drag as you go.
+
+Caveats: Tencent QQ and a few other stubborn apps ignore AX `setSize` even with the standard `AXEnhancedUserInterface` workaround, so they won't resize. If you drag a window's title bar (whole-window move, not an edge) the tile gets broken — re-tile to clean up. The session ends on the next tile or undo.
 
 ### How the layout is decided
 
